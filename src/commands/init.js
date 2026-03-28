@@ -419,7 +419,7 @@ export async function init(projectName, cliOptions) {
     ['Team docs', 'docs/README.md · docs/GATES.md'],
     config.yootiOs ? ['Yooti OS config', 'yooti.config.json (agents registered)'] : null,
     config.projectType !== 'web' ? ['Agent scaffold', `agents/template-agent/  (graph · state · nodes · tools · tests · evals)`] : null,
-    config.projectType !== 'web' ? ['Agent context', config.projectType === 'agent' ? `.claude/CLAUDE.md  (LangGraph + LangChain rules)` : `agents/.claude/CLAUDE.md  (LangGraph + LangChain rules)`] : null,
+    config.projectType !== 'web' ? ['Agent context', `.claude/CLAUDE.md  (LangGraph + LangChain rules)`] : null,
     config.projectType !== 'web' && config.ci === 'github-actions' ? ['Agent CI', `GitHub Actions: agent-unit + agent-integration jobs`] : null,
     config.context === 'brownfield' ? ['Risk surface report', '.agent/discovery/risk-surface.json'] : null,
     config.context === 'brownfield' ? ['Baseline snapshot stub', '.agent/snapshots/baseline.json'] : null,

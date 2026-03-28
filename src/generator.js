@@ -994,6 +994,31 @@ and produce evidence packages for human review at Gate G3 (PR review).
 
 RULE: If ANY step fails → diagnose → fix → restart from Step 1. Never skip steps.
 
+## Working in the agents/ layer
+
+When generating or modifying any file inside agents/:
+
+Read these constitutions first:
+  .claude/constitutions/python.md
+  .claude/constitutions/langgraph.md
+  .claude/constitutions/security.md
+  .claude/constitutions/testing.md
+
+Agent architecture rules (summary — full detail in langgraph.md):
+  State is immutable — nodes return dicts, never mutate
+  One node, one responsibility — max 50 lines per node
+  Errors are state — return {"error": str(e)}, never raise
+  Prompts are files — read from agents/[name]/prompts/ not hardcoded
+  Structured logging — structlog on every node entry and exit
+
+Test layers for any agent story:
+  Unit:        agents/[name]/tests/unit/       no LLM calls, every commit
+  Integration: agents/[name]/tests/integration/ mocked LLM, every PR
+  Evals:       agents/[name]/tests/evals/       real LLM, nightly only
+
+Never add a .claude/ folder inside agents/
+All Claude context lives here in the root .claude/ folder
+
 ## Agent read order — execute before every task
 
 1. Read .agent/requirements/[STORY-ID]-validated.json       — the spec
@@ -2173,9 +2198,6 @@ ${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? ` 
       write('.env.example', agentEnvExample(config))
       write('README.md', agentReadmeMd(config))
     } else {
-      // Full product — agent CLAUDE.md goes in agents/.claude/
-      mkdirSync(toForwardSlash(`${root}/agents/.claude`), { recursive: true })
-      write('agents/.claude/CLAUDE.md', agentClaudeMd(config))
       // Append agent .env vars to existing .env.example
       const agentEnv = agentEnvExample(config)
       writeFileSync(toForwardSlash(`${root}/.env.example`),
