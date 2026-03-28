@@ -1062,9 +1062,9 @@ Always apply:
 - .claude/constitutions/testing.md
 
 ${config.stack.includes('node') ? 'TypeScript layer:\n- .claude/constitutions/typescript.md' : ''}
-${config.stack.includes('react') ? 'React layer:\n- .claude/constitutions/react.md' : ''}
+${config.stack.includes('react') || config.stack.includes('nextjs') ? 'React layer:\n- .claude/constitutions/react.md' : ''}
 ${config.stack.includes('python') ? 'Python layer:\n- .claude/constitutions/python.md' : ''}
-${config.stack.includes('node') || config.stack.includes('python') ? 'Database layer:\n- .claude/constitutions/postgresql.md' : ''}
+${(config.databases || []).includes('postgres') || (config.databases || []).includes('pgvector') ? 'Database layer:\n- .claude/constitutions/postgresql.md' : ''}
 ${config.projectType === 'full' || config.projectType === 'agent' ? 'Agent layer:\n- .claude/constitutions/langgraph.md' : ''}
 
 ## Story type templates
@@ -1565,11 +1565,54 @@ print(f"PR body written: {out}")
 `);
 
   // ── Docker compose ──
+  const dbs = config.databases || ['postgres', 'redis'];
+  const hasPostgres = dbs.includes('postgres') || dbs.includes('pgvector');
+  const hasRedis = dbs.includes('redis');
+  const hasMongo = dbs.includes('mongodb');
+  const hasPgvector = dbs.includes('pgvector');
+
   let compose = `# docker-compose.yml — ${config.projectName}\nservices:\n`;
-  if (config.stack.includes('node')) compose += `  api:\n    build: ./services/api\n    ports: ["3000:3000"]\n    environment:\n      DATABASE_URL: postgresql://app:app@postgres:5432/appdb\n      REDIS_URL: redis://redis:6379\n      NODE_ENV: development\n    depends_on: [postgres, redis]\n\n`;
-  if (config.stack.includes('react')) compose += `  frontend:\n    build: ./frontend/dashboard\n    ports: ["5173:5173"]\n    environment:\n      VITE_API_URL: http://localhost:3000\n\n`;
-  if (config.stack.includes('python')) compose += `  batch:\n    build: ./batch/analytics\n    environment:\n      DATABASE_URL: postgresql://app:app@postgres:5432/appdb\n      AWS_DEFAULT_REGION: us-east-1\n    depends_on: [postgres]\n\n`;
-  compose += `  postgres:\n    image: postgres:16-alpine\n    environment: {POSTGRES_DB: appdb, POSTGRES_USER: app, POSTGRES_PASSWORD: app}\n    ports: ["5432:5432"]\n    volumes: [postgres_data:/var/lib/postgresql/data]\n\n  redis:\n    image: redis:7-alpine\n    ports: ["6379:6379"]\n\nvolumes:\n  postgres_data:\n`;
+
+  // Service containers
+  const serviceDeps = [hasPostgres && 'postgres', hasRedis && 'redis', hasMongo && 'mongodb'].filter(Boolean);
+  if (config.stack.includes('node')) {
+    const envLines = [];
+    if (hasPostgres) envLines.push('      DATABASE_URL: postgresql://app:app@postgres:5432/appdb');
+    if (hasRedis)    envLines.push('      REDIS_URL: redis://redis:6379');
+    envLines.push('      NODE_ENV: development');
+    if (hasMongo)    envLines.push('      MONGODB_URL: mongodb://mongodb:27017/appdb');
+    compose += `  api:\n    build: ./services/api\n    ports: ["3000:3000"]\n    environment:\n${envLines.join('\n')}\n    depends_on: [${serviceDeps.join(', ')}]\n\n`;
+  }
+  if (config.stack.includes('react') || config.stack.includes('nextjs')) {
+    const frontendPort = config.stack.includes('nextjs') ? '3001:3000' : '5173:5173';
+    compose += `  frontend:\n    build: ./frontend/dashboard\n    ports: ["${frontendPort}"]\n    environment:\n      VITE_API_URL: http://localhost:3000\n\n`;
+  }
+  if (config.stack.includes('python')) {
+    const batchEnv = [];
+    if (hasPostgres) batchEnv.push('      DATABASE_URL: postgresql://app:app@postgres:5432/appdb');
+    batchEnv.push('      AWS_DEFAULT_REGION: us-east-1');
+    if (hasMongo)    batchEnv.push('      MONGODB_URL: mongodb://mongodb:27017/appdb');
+    const batchDeps = [hasPostgres && 'postgres', hasMongo && 'mongodb'].filter(Boolean);
+    compose += `  batch:\n    build: ./batch/analytics\n    environment:\n${batchEnv.join('\n')}\n${batchDeps.length ? `    depends_on: [${batchDeps.join(', ')}]\n` : ''}\n`;
+  }
+
+  // Database containers
+  if (hasPostgres) {
+    const pgImage = hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
+    compose += `  postgres:\n    image: ${pgImage}\n    environment: {POSTGRES_DB: appdb, POSTGRES_USER: app, POSTGRES_PASSWORD: app}\n    ports: ["5432:5432"]\n    volumes: [postgres_data:/var/lib/postgresql/data]\n\n`;
+  }
+  if (hasRedis) {
+    compose += `  redis:\n    image: redis:7-alpine\n    ports: ["6379:6379"]\n\n`;
+  }
+  if (hasMongo) {
+    compose += `  mongodb:\n    image: mongo:7\n    ports: ["27017:27017"]\n    volumes: [mongo_data:/data/db]\n\n`;
+  }
+
+  // Volumes
+  const volumes = [];
+  if (hasPostgres) volumes.push('  postgres_data:');
+  if (hasMongo)    volumes.push('  mongo_data:');
+  compose += `volumes:\n${volumes.length ? volumes.join('\n') + '\n' : '  {}\n'}`;
   write('docker-compose.yml', compose);
 
   // ── yooti.config.json ──
@@ -1748,13 +1791,13 @@ Blocks: T002
   if (config.stack.includes('node')) {
     write('.claude/constitutions/typescript.md', typescriptConstitution(config));
   }
-  if (config.stack.includes('react')) {
+  if (config.stack.includes('react') || config.stack.includes('nextjs')) {
     write('.claude/constitutions/react.md', reactConstitution(config));
   }
   if (config.stack.includes('python')) {
     write('.claude/constitutions/python.md', pythonConstitution(config));
   }
-  if (config.stack.includes('node') || config.stack.includes('python')) {
+  if ((config.databases || []).includes('postgres') || (config.databases || []).includes('pgvector')) {
     write('.claude/constitutions/postgresql.md', postgresqlConstitution(config));
   }
 
@@ -1830,20 +1873,29 @@ Blocks: T002
   if (config.ci === 'github-actions') {
     write('.github/workflows/unit-tests.yml', unitTestsCiYml(config));
 
+    let ciServices = '';
+    let ciEnv = '';
+    if (hasPostgres) {
+      const ciPgImage = hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
+      ciServices += `      postgres:\n        image: ${ciPgImage}\n        env: { POSTGRES_DB: testdb, POSTGRES_PASSWORD: test }\n        ports: ['5432:5432']\n`;
+      ciEnv += `          DATABASE_URL: postgresql://postgres:test@localhost:5432/testdb\n`;
+    }
+    if (hasRedis) {
+      ciServices += `      redis:\n        image: redis:7-alpine\n        ports: ['6379:6379']\n`;
+      ciEnv += `          REDIS_URL: redis://localhost:6379\n`;
+    }
+    if (hasMongo) {
+      ciServices += `      mongodb:\n        image: mongo:7\n        ports: ['27017:27017']\n`;
+      ciEnv += `          MONGODB_URL: mongodb://localhost:27017/testdb\n`;
+    }
+
     write('.github/workflows/integration-tests.yml', `name: Integration Tests
 on: [pull_request]
 jobs:
   integration:
     runs-on: ubuntu-latest
     services:
-      postgres:
-        image: postgres:16-alpine
-        env: { POSTGRES_DB: testdb, POSTGRES_PASSWORD: test }
-        ports: ['5432:5432']
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-    steps:
+${ciServices}    steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
@@ -1852,9 +1904,7 @@ jobs:
       - run: npx vitest run tests/integration/ --coverage
         working-directory: services/api
         env:
-          DATABASE_URL: postgresql://postgres:test@localhost:5432/testdb
-          REDIS_URL: redis://localhost:6379
-${config.stack.includes('react') ? `  playwright:
+${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? `  playwright:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -1890,28 +1940,15 @@ ${config.stack.includes('react') ? `  playwright:
   // ── Root files (before agent scaffold so agents can append to .env.example) ──
   write('.gitignore', `node_modules/\n.env\n*.env.local\ndist/\n.coverage/\n__pycache__/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\nplaywright-report/\n.lighthouseci/\n`);
 
-  write('.env.example', `# Database
-DATABASE_URL=postgresql://app:app@localhost:5432/appdb
-
-# Cache
-REDIS_URL=redis://localhost:6379
-
-# API
-NODE_ENV=development
-PORT=3000
-JWT_SECRET=change-me-in-production
-
-# AWS (batch)
-AWS_DEFAULT_REGION=us-east-1
-S3_BUCKET=analytics-local
-
-# Frontend
-VITE_API_URL=http://localhost:3000
-
-# Yooti OS (optional)
-# YOOTI_ENDPOINT=
-# YOOTI_API_KEY=
-`);
+  let envExample = '';
+  if (hasPostgres) envExample += `# Database\nDATABASE_URL=postgresql://app:app@localhost:5432/appdb\n\n`;
+  if (hasRedis)    envExample += `# Cache\nREDIS_URL=redis://localhost:6379\n\n`;
+  if (hasMongo)    envExample += `# MongoDB\nMONGODB_URL=mongodb://localhost:27017/appdb\n\n`;
+  envExample += `# API\nNODE_ENV=development\nPORT=3000\nJWT_SECRET=change-me-in-production\n\n`;
+  envExample += `# AWS (batch)\nAWS_DEFAULT_REGION=us-east-1\nS3_BUCKET=analytics-local\n\n`;
+  envExample += `# Frontend\nVITE_API_URL=http://localhost:3000\n\n`;
+  envExample += `# Yooti OS (optional)\n# YOOTI_ENDPOINT=\n# YOOTI_API_KEY=\n`;
+  write('.env.example', envExample);
 
   // ── AGENT SCAFFOLD ──
   const hasAgents = config.projectType === 'full' || config.projectType === 'agent'

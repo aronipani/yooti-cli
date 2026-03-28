@@ -117,27 +117,6 @@ export async function init(projectName, cliOptions) {
     answers = await inquirer.prompt([
       {
         type: 'list',
-        name: 'projectType',
-        message: 'Project type',
-        when: !cliOptions.type,
-        choices: [
-          {
-            name: 'Full product      web frontend + API service + agents + batch',
-            value: 'full'
-          },
-          {
-            name: 'Web + API         frontend + Node.js service + batch (no agents)',
-            value: 'web'
-          },
-          {
-            name: 'Agent service     LangGraph + LangChain agents only (standalone)',
-            value: 'agent'
-          },
-        ],
-        default: 'full',
-      },
-      {
-        type: 'list',
         name: 'context',
         message: 'Project context',
         when: !cliOptions.context,
@@ -155,20 +134,72 @@ export async function init(projectName, cliOptions) {
         default: runningInRepo ? process.cwd().split('/').pop() : 'my-project',
         validate: v => v.length > 0 || 'Required',
       },
+      // ── Stack selection ──
       {
-        type: 'checkbox',
-        name: 'stack',
-        message: 'Application stack',
-        when: (answers) => {
-          const type = cliOptions.type || answers.projectType
-          return type !== 'agent' && !cliOptions.stack
-        },
+        type: 'list',
+        name: 'backend',
+        message: 'Backend service',
+        when: !cliOptions.stack,
         choices: [
-          { name: 'Node.js API service', value: 'node', checked: true },
-          { name: 'React frontend', value: 'react', checked: true },
-          { name: 'Python batch / analytics', value: 'python', checked: true },
+          { name: 'Node.js + TypeScript (Express / Fastify)', value: 'node' },
+          { name: 'Python + FastAPI',                         value: 'python-api' },
+          { name: 'None — frontend or agents only',          value: 'none' },
         ],
       },
+      {
+        type: 'list',
+        name: 'frontend',
+        message: 'Frontend',
+        when: !cliOptions.stack,
+        choices: [
+          { name: 'React 18 + Vite + shadcn/ui',  value: 'react' },
+          { name: 'Next.js 14 + shadcn/ui',        value: 'nextjs' },
+          { name: 'None — API or agent only',      value: 'none' },
+        ],
+      },
+      {
+        type: 'list',
+        name: 'agents',
+        message: 'AI agent layer',
+        when: !cliOptions.stack,
+        choices: [
+          { name: 'LangGraph + LangChain (Python)', value: 'langgraph' },
+          { name: 'None — no agent layer',          value: 'none' },
+        ],
+      },
+      {
+        type: 'list',
+        name: 'batch',
+        message: 'Batch / data layer',
+        when: !cliOptions.stack,
+        choices: [
+          { name: 'Python + boto3 + pandas',  value: 'python-batch' },
+          { name: 'None',                      value: 'none' },
+        ],
+      },
+      {
+        type: 'checkbox',
+        name: 'databases',
+        message: 'Databases',
+        when: !cliOptions.stack,
+        choices: [
+          { name: 'PostgreSQL 16',               value: 'postgres',  checked: true },
+          { name: 'pgvector (for RAG / agents)', value: 'pgvector',  checked: false },
+          { name: 'Redis 7 (cache / sessions)',  value: 'redis',     checked: true },
+          { name: 'MongoDB',                     value: 'mongodb',   checked: false },
+        ],
+      },
+      {
+        type: 'checkbox',
+        name: 'llmProviders',
+        message: 'LLM providers',
+        when: answers => !cliOptions.stack && answers.agents !== 'none',
+        choices: [
+          { name: 'Anthropic (Claude)', value: 'anthropic', checked: true },
+          { name: 'OpenAI (GPT-4o)',    value: 'openai',    checked: false },
+        ],
+      },
+      // ── Remaining config ──
       {
         type: 'list',
         name: 'linter',
@@ -210,49 +241,6 @@ export async function init(projectName, cliOptions) {
           { name: 'Codex (OpenAI)', value: 'codex' },
           { name: 'Both', value: 'both' },
         ],
-      },
-      {
-        type: 'checkbox',
-        name: 'agentFrameworks',
-        message: 'Agent frameworks',
-        when: (answers) => {
-          const type = cliOptions.type || answers.projectType
-          return (type === 'full' || type === 'agent') && !cliOptions.agentFrameworks
-        },
-        choices: [
-          { name: 'LangGraph  (stateful graph-based agents)', value: 'langgraph', checked: true },
-          { name: 'LangChain  (chains, tools, retrievers)',   value: 'langchain', checked: true },
-        ],
-      },
-      {
-        type: 'list',
-        name: 'llmProvider',
-        message: 'Primary LLM provider',
-        when: (answers) => {
-          const type = cliOptions.type || answers.projectType
-          return (type === 'full' || type === 'agent') && !cliOptions.llmProvider
-        },
-        choices: [
-          { name: 'Anthropic (Claude)', value: 'anthropic' },
-          { name: 'OpenAI (GPT-4o)',    value: 'openai' },
-          { name: 'Both',               value: 'both' },
-        ],
-        default: 'anthropic',
-      },
-      {
-        type: 'list',
-        name: 'vectorStore',
-        message: 'Vector store',
-        when: (answers) => {
-          const type = cliOptions.type || answers.projectType
-          return (type === 'full' || type === 'agent') && !cliOptions.vectorStore
-        },
-        choices: [
-          { name: 'pgvector  (PostgreSQL extension — already in your stack)', value: 'pgvector' },
-          { name: 'Chroma    (lightweight, local-first)',                       value: 'chroma' },
-          { name: 'None      (add later)',                                      value: 'none' },
-        ],
-        default: 'pgvector',
       },
       {
         type: 'list',
@@ -305,25 +293,53 @@ export async function init(projectName, cliOptions) {
     ]);
   }
 
-  function resolveStack() {
-    const type = cliOptions.type || answers.projectType || 'full'
-    if (type === 'agent') return ['python']
-    if (cliOptions.stack) return cliOptions.stack.split(',')
-    if (answers.stack) return answers.stack
-    if (type === 'full') return ['node', 'react', 'python']
-    return ['node', 'react', 'python']
+  // Build config.stack from individual answers (or CLI flags)
+  let stack = []
+  let agentFrameworks = []
+  if (cliOptions.stack) {
+    // CLI flag path — comma-separated stack
+    stack = cliOptions.stack.split(',')
+    agentFrameworks = cliOptions.agentFrameworks
+      ? cliOptions.agentFrameworks.split(',')
+      : []
+  } else {
+    // Wizard path — derive stack from individual answers
+    if (answers.backend === 'node')         stack.push('node')
+    if (answers.backend === 'python-api')   stack.push('python')
+    if (answers.frontend === 'react')       stack.push('react')
+    if (answers.frontend === 'nextjs')      stack.push('nextjs')
+    if (answers.agents === 'langgraph') {
+      stack.push('python')
+      agentFrameworks = ['langgraph', 'langchain']
+    }
+    if (answers.batch === 'python-batch')   stack.push('python')
+    stack = [...new Set(stack)]  // deduplicate
   }
+
+  // Derive projectType from stack
+  const hasAgentLayer = answers.agents === 'langgraph' || agentFrameworks.includes('langgraph')
+  const hasBackendOrFrontend = stack.some(s => ['node', 'react', 'nextjs'].includes(s)) || answers.backend === 'python-api'
+  let projectType = cliOptions.type || 'full'
+  if (!cliOptions.type) {
+    if (hasAgentLayer && hasBackendOrFrontend) projectType = 'full'
+    else if (hasAgentLayer) projectType = 'agent'
+    else projectType = 'web'
+  }
+
+  const databases    = answers.databases   || ['postgres', 'redis']
+  const vectorStore  = answers.databases?.includes('pgvector') ? 'pgvector' : 'none'
+  const llmProviders = answers.llmProviders || []
 
   const config = {
     projectName: (projectName && projectName !== '.') ? projectName : (answers.projectName || 'my-project'),
-    projectType: cliOptions.type || answers.projectType || 'full',
+    projectType,
     context: cliOptions.context || answers.context || 'greenfield',
-    stack: resolveStack(),
-    agentFrameworks: cliOptions.agentFrameworks
-      ? cliOptions.agentFrameworks.split(',')
-      : (answers.agentFrameworks || []),
-    llmProvider: cliOptions.llmProvider || answers.llmProvider || 'anthropic',
-    vectorStore: cliOptions.vectorStore || answers.vectorStore || 'pgvector',
+    stack,
+    agentFrameworks,
+    databases,
+    vectorStore,
+    llmProviders,
+    llmProvider: llmProviders.includes('anthropic') ? 'anthropic' : (llmProviders[0] || 'anthropic'),
     linter: cliOptions.linter || answers.linter || 'eslint',
     ci: cliOptions.ci || answers.ci || 'github-actions',
     deploy: cliOptions.deploy || answers.deploy || 'docker',
