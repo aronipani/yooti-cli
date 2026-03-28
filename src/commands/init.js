@@ -180,14 +180,37 @@ export async function init(projectName, cliOptions) {
       {
         type: 'checkbox',
         name: 'databases',
-        message: 'Databases',
+        message: 'Databases (space to select, enter to confirm)',
         when: !cliOptions.stack,
         choices: [
-          { name: 'PostgreSQL 16',               value: 'postgres',  checked: true },
-          { name: 'pgvector (for RAG / agents)', value: 'pgvector',  checked: false },
-          { name: 'Redis 7 (cache / sessions)',  value: 'redis',     checked: true },
-          { name: 'MongoDB',                     value: 'mongodb',   checked: false },
+          {
+            name: 'PostgreSQL 16          — primary relational database',
+            value: 'postgres',
+            checked: true,
+          },
+          {
+            name: 'pgvector               — vector embeddings for RAG and agents',
+            value: 'pgvector',
+            checked: false,
+          },
+          {
+            name: 'Redis 7                — cache, sessions, rate limiting',
+            value: 'redis',
+            checked: true,
+          },
+          {
+            name: 'MongoDB                — document store',
+            value: 'mongodb',
+            checked: false,
+          },
+          {
+            name: 'Apache AGE             — graph database extension for PostgreSQL',
+            value: 'age',
+            checked: false,
+          },
         ],
+        validate: selected =>
+          selected.length > 0 || 'Select at least one database',
       },
       {
         type: 'checkbox',
@@ -209,6 +232,35 @@ export async function init(projectName, cliOptions) {
           { name: 'ESLint + Prettier  (recommended default)', value: 'eslint' },
           { name: 'Biome              (faster, single tool)', value: 'biome' },
         ],
+      },
+      {
+        type: 'list',
+        name: 'stage',
+        message: 'Pipeline adoption stage',
+        when: !cliOptions.stage,
+        choices: [
+          {
+            name: 'Stage 1 — Foundation   (framework only, your team writes all code)',
+            value: 1
+          },
+          {
+            name: 'Stage 2 — Build        (agent writes plans, your team writes code)',
+            value: 2
+          },
+          {
+            name: 'Stage 3 — Review       (agent codes, your team reviews every PR)  ← recommended',
+            value: 3
+          },
+          {
+            name: 'Stage 4 — Deploy       (agent codes + deploys to staging, you approve production)',
+            value: 4
+          },
+          {
+            name: 'Stage 5 — Autonomous   (full pipeline, your team owns 5 gates only)',
+            value: 5
+          },
+        ],
+        default: 2,
       },
       {
         type: 'list',
@@ -244,51 +296,24 @@ export async function init(projectName, cliOptions) {
       },
       {
         type: 'list',
-        name: 'stage',
-        message: 'Pipeline adoption stage',
-        when: !cliOptions.stage,
-        choices: [
-          {
-            name: 'Stage 1 — Foundation     scaffold + tooling only, team codes manually',
-            value: 1
-          },
-          {
-            name: 'Stage 2 — Build          agent writes .plan files, team codes',
-            value: 2
-          },
-          {
-            name: 'Stage 3 — Review         agent codes + tests, team reviews PR and controls deploy',
-            value: 3
-          },
-          {
-            name: 'Stage 4 — Deploy         agent codes + deploys to staging, team approves production',
-            value: 4
-          },
-          {
-            name: 'Stage 5 — Autonomous     full pipeline, team owns 5 decision gates only',
-            value: 5
-          },
-        ],
-        default: 3,
-      },
-      {
-        type: 'list',
         name: 'gitMode',
         message: 'Git repository',
         when: !cliOptions.gitMode,
         choices: [
-          { name: 'Initialise + initial commit  (recommended)', value: 'init-commit' },
-          { name: 'Initialise only — no commit', value: 'init-only' },
-          { name: 'Skip git setup', value: 'skip' },
+          {
+            name: 'Init + first commit    (recommended — git init and commit all generated files)',
+            value: 'init-commit'
+          },
+          {
+            name: 'Init only             (git init but no commit — you commit manually)',
+            value: 'init-only'
+          },
+          {
+            name: 'Skip                  (no git — I will set it up myself)',
+            value: 'skip'
+          },
         ],
-        default: 'init-commit',
-      },
-      {
-        type: 'confirm',
-        name: 'yootiOs',
-        message: 'Yooti OS integration? (behavioral scoring — can add later)',
-        when: !cliOptions.yootiOs,
-        default: false,
+        default: 0,
       },
     ]);
   }
@@ -327,7 +352,9 @@ export async function init(projectName, cliOptions) {
   }
 
   const databases    = answers.databases   || ['postgres', 'redis']
-  const vectorStore  = answers.databases?.includes('pgvector') ? 'pgvector' : 'none'
+  const vectorStore  = answers.databases?.includes('pgvector') ? 'pgvector'
+                     : answers.databases?.includes('chroma')   ? 'chroma'
+                     : 'none'
   const llmProviders = answers.llmProviders || []
 
   const config = {
@@ -338,6 +365,10 @@ export async function init(projectName, cliOptions) {
     agentFrameworks,
     databases,
     vectorStore,
+    hasPostgres: databases.includes('postgres') || databases.includes('pgvector') || databases.includes('age'),
+    hasRedis:    databases.includes('redis'),
+    hasMongo:    databases.includes('mongodb'),
+    hasAge:      databases.includes('age'),
     llmProviders,
     llmProvider: llmProviders.includes('anthropic') ? 'anthropic' : (llmProviders[0] || 'anthropic'),
     linter: cliOptions.linter || answers.linter || 'eslint',

@@ -13,6 +13,7 @@ import { langgraphConstitution } from './templates/constitutions/langgraph-const
 import { postgresqlConstitution } from './templates/constitutions/postgresql-constitution.js';
 import { securityConstitution } from './templates/constitutions/security-constitution.js';
 import { testingConstitution } from './templates/constitutions/testing-constitution.js';
+import { mongodbConstitution } from './templates/constitutions/mongodb-constitution.js';
 import {
   featureStoryTemplate, bugfixStoryTemplate, refactorStoryTemplate,
   agentStoryTemplate, securityPatchTemplate, apiContractTemplate
@@ -1064,7 +1065,8 @@ Always apply:
 ${config.stack.includes('node') ? 'TypeScript layer:\n- .claude/constitutions/typescript.md' : ''}
 ${config.stack.includes('react') || config.stack.includes('nextjs') ? 'React layer:\n- .claude/constitutions/react.md' : ''}
 ${config.stack.includes('python') ? 'Python layer:\n- .claude/constitutions/python.md' : ''}
-${(config.databases || []).includes('postgres') || (config.databases || []).includes('pgvector') ? 'Database layer:\n- .claude/constitutions/postgresql.md' : ''}
+${config.hasPostgres ? 'Database layer:\n- .claude/constitutions/postgresql.md' : ''}
+${config.hasMongo ? 'MongoDB layer:\n- .claude/constitutions/mongodb.md' : ''}
 ${config.projectType === 'full' || config.projectType === 'agent' ? 'Agent layer:\n- .claude/constitutions/langgraph.md' : ''}
 
 ## Story type templates
@@ -1565,55 +1567,166 @@ print(f"PR body written: {out}")
 `);
 
   // ── Docker compose ──
-  const dbs = config.databases || ['postgres', 'redis'];
-  const hasPostgres = dbs.includes('postgres') || dbs.includes('pgvector');
-  const hasRedis = dbs.includes('redis');
-  const hasMongo = dbs.includes('mongodb');
-  const hasPgvector = dbs.includes('pgvector');
+  const hasPostgres = config.hasPostgres !== undefined ? config.hasPostgres : true;
+  const hasRedis    = config.hasRedis    !== undefined ? config.hasRedis    : true;
+  const hasMongo    = config.hasMongo    || false;
+  const hasAge      = config.hasAge      || false;
+  const hasPgvector = (config.databases || []).includes('pgvector');
 
-  let compose = `# docker-compose.yml — ${config.projectName}\nservices:\n`;
+  const composeParts = [];
+  composeParts.push(`version: '3.9'`);
+  composeParts.push('');
+  composeParts.push('services:');
 
-  // Service containers
-  const serviceDeps = [hasPostgres && 'postgres', hasRedis && 'redis', hasMongo && 'mongodb'].filter(Boolean);
+  // API service
   if (config.stack.includes('node')) {
-    const envLines = [];
-    if (hasPostgres) envLines.push('      DATABASE_URL: postgresql://app:app@postgres:5432/appdb');
-    if (hasRedis)    envLines.push('      REDIS_URL: redis://redis:6379');
-    envLines.push('      NODE_ENV: development');
-    if (hasMongo)    envLines.push('      MONGODB_URL: mongodb://mongodb:27017/appdb');
-    compose += `  api:\n    build: ./services/api\n    ports: ["3000:3000"]\n    environment:\n${envLines.join('\n')}\n    depends_on: [${serviceDeps.join(', ')}]\n\n`;
-  }
-  if (config.stack.includes('react') || config.stack.includes('nextjs')) {
-    const frontendPort = config.stack.includes('nextjs') ? '3001:3000' : '5173:5173';
-    compose += `  frontend:\n    build: ./frontend/dashboard\n    ports: ["${frontendPort}"]\n    environment:\n      VITE_API_URL: http://localhost:3000\n\n`;
-  }
-  if (config.stack.includes('python')) {
-    const batchEnv = [];
-    if (hasPostgres) batchEnv.push('      DATABASE_URL: postgresql://app:app@postgres:5432/appdb');
-    batchEnv.push('      AWS_DEFAULT_REGION: us-east-1');
-    if (hasMongo)    batchEnv.push('      MONGODB_URL: mongodb://mongodb:27017/appdb');
-    const batchDeps = [hasPostgres && 'postgres', hasMongo && 'mongodb'].filter(Boolean);
-    compose += `  batch:\n    build: ./batch/analytics\n    environment:\n${batchEnv.join('\n')}\n${batchDeps.length ? `    depends_on: [${batchDeps.join(', ')}]\n` : ''}\n`;
+    const apiDeps = [hasPostgres && 'postgres', hasRedis && 'redis'].filter(Boolean);
+    composeParts.push(`
+  api:
+    build: ./services/api
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=\${DATABASE_URL}
+      - REDIS_URL=\${REDIS_URL}
+    volumes:
+      - ./services/api:/app
+      - /app/node_modules
+    depends_on:
+${apiDeps.map(d => `      - ${d}`).join('\n')}
+    restart: unless-stopped`);
   }
 
-  // Database containers
+  // Agent service
+  if (config.stack.includes('python') || config.projectType === 'agent') {
+    const agentDeps = [hasPostgres && 'postgres'].filter(Boolean);
+    composeParts.push(`
+  agents:
+    build: ./agents
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=\${DATABASE_URL}
+      - ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY}
+      - LANGCHAIN_TRACING_V2=\${LANGCHAIN_TRACING_V2}
+      - LANGCHAIN_API_KEY=\${LANGCHAIN_API_KEY}
+    volumes:
+      - ./agents:/app
+    depends_on:
+${agentDeps.map(d => `      - ${d}`).join('\n')}
+    restart: unless-stopped`);
+  }
+
+  // Frontend service
+  if (config.stack.includes('react') || config.stack.includes('nextjs')) {
+    composeParts.push(`
+  frontend:
+    build: ./frontend/dashboard
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend/dashboard:/app
+      - /app/node_modules
+    restart: unless-stopped`);
+  }
+
+  // Database services — only what was selected
   if (hasPostgres) {
-    const pgImage = hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine';
-    compose += `  postgres:\n    image: ${pgImage}\n    environment: {POSTGRES_DB: appdb, POSTGRES_USER: app, POSTGRES_PASSWORD: app}\n    ports: ["5432:5432"]\n    volumes: [postgres_data:/var/lib/postgresql/data]\n\n`;
+    const pgvectorInit = hasPgvector
+      ? `\n      - ./pipeline/scripts/init-pgvector.sql:/docker-entrypoint-initdb.d/01-pgvector.sql`
+      : '';
+    const ageInit = hasAge
+      ? `\n      - ./pipeline/scripts/init-age.sql:/docker-entrypoint-initdb.d/02-age.sql`
+      : '';
+    composeParts.push(`
+  postgres:
+    image: ${hasPgvector ? 'pgvector/pgvector:pg16' : 'postgres:16-alpine'}
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=app
+      - POSTGRES_PASSWORD=app
+      - POSTGRES_DB=appdb
+    volumes:
+      - pg_data:/var/lib/postgresql/data${pgvectorInit}${ageInit}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app"]
+      interval: 5s
+      timeout: 5s
+      retries: 5`);
   }
+
   if (hasRedis) {
-    compose += `  redis:\n    image: redis:7-alpine\n    ports: ["6379:6379"]\n\n`;
+    composeParts.push(`
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5`);
   }
+
   if (hasMongo) {
-    compose += `  mongodb:\n    image: mongo:7\n    ports: ["27017:27017"]\n    volumes: [mongo_data:/data/db]\n\n`;
+    composeParts.push(`
+  mongo:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=app
+      - MONGO_INITDB_ROOT_PASSWORD=app
+      - MONGO_INITDB_DATABASE=appdb
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped`);
   }
 
   // Volumes
-  const volumes = [];
-  if (hasPostgres) volumes.push('  postgres_data:');
-  if (hasMongo)    volumes.push('  mongo_data:');
-  compose += `volumes:\n${volumes.length ? volumes.join('\n') + '\n' : '  {}\n'}`;
-  write('docker-compose.yml', compose);
+  const composeVolumes = [];
+  if (hasPostgres) composeVolumes.push('  pg_data:');
+  if (hasRedis)    composeVolumes.push('  redis_data:');
+  if (hasMongo)    composeVolumes.push('  mongo_data:');
+
+  if (composeVolumes.length) {
+    composeParts.push('');
+    composeParts.push('volumes:');
+    composeParts.push(composeVolumes.join('\n'));
+  }
+
+  write('docker-compose.yml', composeParts.join('\n') + '\n');
+
+  // ── Database init scripts ──
+  if (hasPgvector) {
+    write('pipeline/scripts/init-pgvector.sql', `-- pgvector extension init
+-- Runs automatically on first docker compose up
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Verify installation
+SELECT extname, extversion
+FROM pg_extension
+WHERE extname = 'vector';
+`);
+  }
+
+  if (hasAge) {
+    write('pipeline/scripts/init-age.sql', `-- Apache AGE extension init
+-- Runs automatically on first docker compose up
+CREATE EXTENSION IF NOT EXISTS age;
+LOAD 'age';
+SET search_path = ag_catalog, "$user", public;
+
+-- Create default graph
+SELECT create_graph('${config.projectName}_graph');
+`);
+  }
 
   // ── yooti.config.json ──
   write('yooti.config.json', JSON.stringify({
@@ -1797,8 +1910,11 @@ Blocks: T002
   if (config.stack.includes('python')) {
     write('.claude/constitutions/python.md', pythonConstitution(config));
   }
-  if ((config.databases || []).includes('postgres') || (config.databases || []).includes('pgvector')) {
+  if (hasPostgres) {
     write('.claude/constitutions/postgresql.md', postgresqlConstitution(config));
+  }
+  if (hasMongo) {
+    write('.claude/constitutions/mongodb.md', mongodbConstitution(config));
   }
 
   const hasAgentsConst = config.projectType === 'full' || config.projectType === 'agent';
@@ -1940,15 +2056,64 @@ ${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? ` 
   // ── Root files (before agent scaffold so agents can append to .env.example) ──
   write('.gitignore', `node_modules/\n.env\n*.env.local\ndist/\n.coverage/\n__pycache__/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\nplaywright-report/\n.lighthouseci/\n`);
 
-  let envExample = '';
-  if (hasPostgres) envExample += `# Database\nDATABASE_URL=postgresql://app:app@localhost:5432/appdb\n\n`;
-  if (hasRedis)    envExample += `# Cache\nREDIS_URL=redis://localhost:6379\n\n`;
-  if (hasMongo)    envExample += `# MongoDB\nMONGODB_URL=mongodb://localhost:27017/appdb\n\n`;
-  envExample += `# API\nNODE_ENV=development\nPORT=3000\nJWT_SECRET=change-me-in-production\n\n`;
-  envExample += `# AWS (batch)\nAWS_DEFAULT_REGION=us-east-1\nS3_BUCKET=analytics-local\n\n`;
-  envExample += `# Frontend\nVITE_API_URL=http://localhost:3000\n\n`;
-  envExample += `# Yooti OS (optional)\n# YOOTI_ENDPOINT=\n# YOOTI_API_KEY=\n`;
-  write('.env.example', envExample);
+  const envLines = [];
+  envLines.push('# ── APPLICATION ──');
+  envLines.push('NODE_ENV=development');
+  envLines.push('PORT=3000');
+  envLines.push('');
+
+  if (hasPostgres) {
+    envLines.push('# ── DATABASE ──');
+    envLines.push('DATABASE_URL=postgresql://app:app@localhost:5432/appdb');
+    if (hasPgvector) {
+      envLines.push('VECTOR_DIMENSIONS=1536');
+      envLines.push('VECTOR_SIMILARITY=cosine');
+    }
+    if (hasAge) {
+      envLines.push('GRAPH_DATABASE_URL=postgresql://app:app@localhost:5432/appdb');
+    }
+    envLines.push('');
+  }
+
+  if (hasRedis) {
+    envLines.push('# ── CACHE ──');
+    envLines.push('REDIS_URL=redis://localhost:6379');
+    envLines.push('');
+  }
+
+  if (hasMongo) {
+    envLines.push('# ── MONGODB ──');
+    envLines.push('MONGODB_URL=mongodb://app:app@localhost:27017/appdb');
+    envLines.push('');
+  }
+
+  if (config.agentFrameworks?.includes('langgraph') ||
+      config.projectType === 'agent' ||
+      config.projectType === 'full') {
+    envLines.push('# ── LLM PROVIDERS ──');
+    if (config.llmProviders?.includes('anthropic') ||
+        !config.llmProviders?.length) {
+      envLines.push('ANTHROPIC_API_KEY=your-key-here');
+    }
+    if (config.llmProviders?.includes('openai')) {
+      envLines.push('OPENAI_API_KEY=your-key-here');
+    }
+    envLines.push('');
+    envLines.push('# ── LANGSMITH OBSERVABILITY ──');
+    envLines.push('LANGCHAIN_TRACING_V2=true');
+    envLines.push('LANGCHAIN_API_KEY=your-key-here');
+    envLines.push(`LANGCHAIN_PROJECT=${config.projectName}`);
+    envLines.push('');
+  }
+
+  if (config.stack?.includes('react') || config.stack?.includes('nextjs')) {
+    envLines.push('# ── FRONTEND ──');
+    envLines.push('VITE_API_URL=http://localhost:3000');
+    envLines.push('NEXT_PUBLIC_API_URL=http://localhost:3000');
+    envLines.push('');
+  }
+
+  write('.env.example', envLines.join('\n') + '\n');
 
   // ── AGENT SCAFFOLD ──
   const hasAgents = config.projectType === 'full' || config.projectType === 'agent'
