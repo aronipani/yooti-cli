@@ -2022,6 +2022,8 @@ Blocks: T002
     write('frontend/dashboard/tests/setup.ts', testSetupFrontendTs(config));
     write('frontend/dashboard/tests/helpers/render.tsx', testHelpersRenderTsx(config));
     write('frontend/dashboard/tests/unit/example.test.tsx', exampleUnitTestTsx(config));
+    write('frontend/dashboard/Dockerfile', frontendDockerfile(config));
+    write('frontend/dashboard/.dockerignore', nodeDockerignore());
   }
 
   const hasPython = config.stack.includes('python') || config.projectType === 'agent' || config.projectType === 'full';
@@ -2219,6 +2221,9 @@ ${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? ` 
     write(`agents/requirements.txt`, agentRequirements(config))
     write(`agents/pyproject.toml`, agentPyprojectToml(config))
     write(`agents/conftest.py`, agentConftestPy())
+    write('agents/main.py', agentsMain(config))
+    write('agents/Dockerfile', agentsDockerfile(config))
+    write('agents/.dockerignore', pythonDockerignore())
 
     // Agent .claude/ context
     if (config.projectType === 'agent') {
@@ -2341,6 +2346,7 @@ function generateFastApiService(root, config, write) {
   write('services/api_python/requirements.txt',           fastApiRequirements(config));
   write('services/api_python/pyproject.toml',             fastApiPyproject(config));
   write('services/api_python/Dockerfile',                 fastApiDockerfile(config));
+  write('services/api_python/.dockerignore',             pythonDockerignore());
   write('services/api_python/src/__init__.py',            '');
   write('services/api_python/src/config.py',              fastApiConfig(config));
   write('services/api_python/src/database.py',            fastApiDatabase(config));
@@ -2749,5 +2755,132 @@ COPY . .
 EXPOSE 8000
 
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+`;
+}
+
+// ── Frontend Dockerfile ──
+
+function frontendDockerfile(config) {
+  if (config.stack?.includes('nextjs')) {
+    return `FROM node:20-alpine AS base
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
+`;
+  }
+
+  // React + Vite
+  return `FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy source
+COPY . .
+
+EXPOSE 5173
+
+# Vite dev server — binds to 0.0.0.0 so Docker can expose the port
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+`;
+}
+
+// ── Agents Dockerfile + main.py ──
+
+function agentsDockerfile(config) {
+  return `FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source
+COPY . .
+
+EXPOSE 8001
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+`;
+}
+
+function agentsMain(config) {
+  return `"""
+${config.projectName} — Agent service entry point
+Exposes LangGraph agents as a FastAPI endpoint.
+"""
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import structlog
+
+log = structlog.get_logger()
+
+app = FastAPI(
+    title="${config.projectName} Agent Service",
+    version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "agents"}
+
+
+# Register agent routers here as agent stories are completed
+# from template_agent.api import router as template_router
+# app.include_router(template_router, prefix="/agents/template")
+`;
+}
+
+// ── .dockerignore templates ──
+
+function pythonDockerignore() {
+  return `__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.env
+.env.*
+!.env.example
+tests/
+*.egg-info
+dist/
+.coverage
+htmlcov/
+`;
+}
+
+function nodeDockerignore() {
+  return `node_modules
+.next
+dist
+.env
+.env.*
+!.env.example
+coverage
+.nyc_output
 `;
 }
