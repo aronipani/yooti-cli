@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'fs';
 import { stageDescription, stagePhases, stageGates, stageAgentInstructions, stageHumanInstructions, stageHandoverPoints } from './stages.js';
 import {
   agentRequirements, agentGraphPy, agentStatePy, agentNodePy,
@@ -1998,6 +1998,7 @@ Blocks: T002
   // ── Unit test scaffold ──
   if (config.stack.includes('node')) {
     mkdirSync(toForwardSlash(`${root}/services/api/tests/helpers`), { recursive: true });
+    write('services/api/package.json', nodeApiPackageJson(config));
     write('services/api/vitest.config.ts', vitestConfig(config));
     write('services/api/tests/setup.ts', testSetupTs(config));
     write('services/api/tests/helpers/factories.ts', testHelpersFactoriesTs(config));
@@ -2014,6 +2015,7 @@ Blocks: T002
 
   if (config.stack.includes('react')) {
     mkdirSync(toForwardSlash(`${root}/frontend/dashboard/tests/helpers`), { recursive: true });
+    write('frontend/dashboard/package.json', frontendPackageJson(config));
     write('frontend/dashboard/vitest.config.ts', vitestConfig({
       ...config,
       _frontendOverrides: true,
@@ -2345,6 +2347,25 @@ FAIL (soft gate): QA reviews and decides — approve or reject with notes
 - [ ] Rollback plan confirmed
 GO: deploy | NO-GO: hold
 `);
+
+  // ── Verify critical files exist ──
+  const criticalFiles = [];
+  if (config.stack?.includes('node')) {
+    criticalFiles.push('services/api/package.json', 'services/api/Dockerfile');
+  }
+  if (config.stack?.includes('react') || config.stack?.includes('nextjs')) {
+    criticalFiles.push('frontend/dashboard/package.json', 'frontend/dashboard/Dockerfile');
+  }
+  if (config.agentFrameworks?.length > 0 || config.projectType === 'agent') {
+    criticalFiles.push('agents/requirements.txt', 'agents/Dockerfile', 'agents/main.py');
+  }
+
+  const missing = criticalFiles.filter(f => !existsSync(toForwardSlash(`${root}/${f}`)));
+  if (missing.length > 0) {
+    console.warn('\n  ⚠ Warning: these files were not generated:');
+    missing.forEach(f => console.warn(`    ${f}`));
+    console.warn('  Run: yooti preflight to check project health\n');
+  }
 
 }
 
@@ -2919,4 +2940,126 @@ dist
 coverage
 .nyc_output
 `;
+}
+
+// ── Package.json templates ──
+
+function frontendPackageJson(config) {
+  const isNextjs = config.stack?.includes('nextjs');
+  return JSON.stringify({
+    name: `${config.projectName}-frontend`,
+    version: '0.1.0',
+    private: true,
+    scripts: isNextjs ? {
+      dev:            'next dev',
+      build:          'next build',
+      start:          'next start',
+      lint:           'next lint',
+      'type-check':   'tsc --noEmit',
+      test:           'vitest',
+      'test:coverage': 'vitest --coverage',
+    } : {
+      dev:            'vite',
+      build:          'tsc && vite build',
+      preview:        'vite preview',
+      lint:           'eslint . --ext ts,tsx',
+      'type-check':   'tsc --noEmit',
+      test:           'vitest',
+      'test:coverage': 'vitest --coverage',
+    },
+    dependencies: {
+      ...(isNextjs ? {
+        'next':    '14.2.3',
+        'react':   '^18.3.1',
+        'react-dom': '^18.3.1',
+      } : {
+        'react':   '^18.3.1',
+        'react-dom': '^18.3.1',
+      }),
+      '@tanstack/react-query': '^5.40.0',
+      'axios':        '^1.7.2',
+      'clsx':         '^2.1.1',
+      'lucide-react': '^0.395.0',
+    },
+    devDependencies: {
+      '@types/react':     '^18.3.3',
+      '@types/react-dom': '^18.3.0',
+      '@types/node':      '^20.14.2',
+      'typescript':       '^5.4.5',
+      ...(isNextjs ? {} : {
+        '@vitejs/plugin-react': '^4.3.1',
+        'vite':   '^5.3.1',
+      }),
+      'tailwindcss':      '^3.4.4',
+      'autoprefixer':     '^10.4.19',
+      'postcss':          '^8.4.38',
+      'vitest':           '^1.6.0',
+      '@vitest/coverage-istanbul': '^1.6.0',
+      '@testing-library/react':       '^16.0.0',
+      '@testing-library/user-event':  '^14.5.2',
+      '@testing-library/jest-dom':    '^6.4.6',
+      'jest-axe':         '^9.0.0',
+      'jsdom':            '^24.1.0',
+      ...(config.linter === 'biome' ? {
+        '@biomejs/biome': '^1.8.2',
+      } : {
+        'eslint':         '^8.57.0',
+        '@typescript-eslint/eslint-plugin': '^7.13.0',
+        '@typescript-eslint/parser':        '^7.13.0',
+        'eslint-plugin-react-hooks':        '^4.6.2',
+        'eslint-plugin-jsx-a11y':           '^6.8.0',
+      }),
+    },
+  }, null, 2);
+}
+
+function nodeApiPackageJson(config) {
+  return JSON.stringify({
+    name: `${config.projectName}-api`,
+    version: '0.1.0',
+    private: true,
+    type: 'module',
+    scripts: {
+      dev:              'tsx watch src/index.ts',
+      build:            'tsc',
+      start:            'node dist/index.js',
+      lint:             config.linter === 'biome' ? 'biome check .' : 'eslint . --ext .ts',
+      'type-check':     'tsc --noEmit',
+      test:             'vitest',
+      'test:coverage':  'vitest --coverage',
+      'test:unit':      'vitest tests/unit',
+      'test:integration': 'vitest tests/integration',
+    },
+    dependencies: {
+      'fastify':        '^4.28.1',
+      '@fastify/cors':  '^9.0.1',
+      'zod':            '^3.23.8',
+      'pino':           '^9.2.0',
+      ...(config.hasPostgres ? {
+        '@prisma/client': '^5.16.0',
+      } : {}),
+      ...(config.hasRedis ? {
+        'ioredis': '^5.4.1',
+      } : {}),
+    },
+    devDependencies: {
+      'typescript':     '^5.4.5',
+      '@types/node':    '^20.14.2',
+      'tsx':            '^4.15.7',
+      'vitest':         '^1.6.0',
+      '@vitest/coverage-istanbul': '^1.6.0',
+      'supertest':      '^7.0.0',
+      '@types/supertest': '^6.0.2',
+      ...(config.hasPostgres ? {
+        'prisma': '^5.16.0',
+      } : {}),
+      ...(config.linter === 'biome' ? {
+        '@biomejs/biome': '^1.8.2',
+      } : {
+        'eslint':         '^8.57.0',
+        '@typescript-eslint/eslint-plugin': '^7.13.0',
+        '@typescript-eslint/parser':        '^7.13.0',
+      }),
+    },
+  }, null, 2);
 }
