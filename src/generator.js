@@ -1623,6 +1623,30 @@ ${apiDeps.map(d => `      - ${d}`).join('\n')}
     restart: unless-stopped`);
   }
 
+  // Python FastAPI service
+  if (config.backend === 'python-api' || config.stack?.includes('python-api')) {
+    const fastApiDeps = [hasPostgres && 'postgres', hasRedis && 'redis'].filter(Boolean);
+    composeParts.push(`
+  api_python:
+    build: ./services/api_python
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=\${DATABASE_URL}
+      - REDIS_URL=\${REDIS_URL}
+      - ANTHROPIC_API_KEY=\${ANTHROPIC_API_KEY}
+    volumes:
+      - ./services/api_python:/app
+    depends_on:
+${fastApiDeps.map(d => `      - ${d}`).join('\n')}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5`);
+  }
+
   // Agent service
   if (config.stack.includes('python') || config.projectType === 'agent') {
     const agentDeps = [hasPostgres && 'postgres'].filter(Boolean);
@@ -1981,6 +2005,11 @@ Blocks: T002
     write('services/api/tests/unit/example.test.ts', exampleUnitTestTs(config));
   }
 
+  // ── Python FastAPI service ──
+  if (config.backend === 'python-api' || config.stack?.includes('python-api')) {
+    generateFastApiService(root, config, write);
+  }
+
   if (config.stack.includes('react')) {
     mkdirSync(toForwardSlash(`${root}/frontend/dashboard/tests/helpers`), { recursive: true });
     write('frontend/dashboard/vitest.config.ts', vitestConfig({
@@ -2294,4 +2323,431 @@ FAIL (soft gate): QA reviews and decides — approve or reject with notes
 GO: deploy | NO-GO: hold
 `);
 
+}
+
+// ── FastAPI service generation ──
+
+function generateFastApiService(root, config, write) {
+  const svc = `${root}/services/api_python`;
+  mkdirSync(toForwardSlash(`${svc}/src/models`),     { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/src/routes`),     { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/src/services`),   { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/src/middleware`),  { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/src/types`),      { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/tests/helpers`),  { recursive: true });
+  mkdirSync(toForwardSlash(`${svc}/tests/unit`),     { recursive: true });
+
+  write('services/api_python/main.py',                    fastApiMain(config));
+  write('services/api_python/requirements.txt',           fastApiRequirements(config));
+  write('services/api_python/pyproject.toml',             fastApiPyproject(config));
+  write('services/api_python/Dockerfile',                 fastApiDockerfile(config));
+  write('services/api_python/src/__init__.py',            '');
+  write('services/api_python/src/config.py',              fastApiConfig(config));
+  write('services/api_python/src/database.py',            fastApiDatabase(config));
+  write('services/api_python/src/models/__init__.py',     '');
+  write('services/api_python/src/models/base.py',         fastApiBaseModel(config));
+  write('services/api_python/src/routes/__init__.py',     '');
+  write('services/api_python/src/routes/health.py',       fastApiHealthRoute(config));
+  write('services/api_python/src/services/__init__.py',   '');
+  write('services/api_python/src/middleware/__init__.py',  '');
+  write('services/api_python/src/middleware/logging.py',   fastApiLogging(config));
+  write('services/api_python/src/types/__init__.py',      '');
+  write('services/api_python/tests/conftest.py',          fastApiConftest(config));
+  write('services/api_python/tests/helpers/factories.py', fastApiFactories(config));
+  write('services/api_python/tests/unit/test_health.py',  fastApiHealthTest(config));
+}
+
+function fastApiMain(config) {
+  return `"""
+${config.projectName} — FastAPI application entry point
+"""
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+import structlog
+
+from .src.config import settings
+from .src.middleware.logging import LoggingMiddleware
+from .src.routes.health import router as health_router
+
+log = structlog.get_logger()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    log.info("api.startup", environment=settings.environment)
+    yield
+    log.info("api.shutdown")
+
+
+app = FastAPI(
+    title="${config.projectName} API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.add_middleware(LoggingMiddleware)
+
+app.include_router(health_router)
+
+# Add more routers here as stories are completed
+# app.include_router(users_router, prefix="/api/v1")
+`;
+}
+
+function fastApiRequirements(config) {
+  const deps = [
+    'fastapi>=0.111.0',
+    'uvicorn[standard]>=0.29.0',
+    'pydantic>=2.7.0',
+    'pydantic-settings>=2.2.0',
+    'structlog>=24.1.0',
+    'python-dotenv>=1.0.0',
+  ];
+  if (config.hasPostgres) {
+    deps.push(
+      'sqlalchemy[asyncio]>=2.0.0',
+      'asyncpg>=0.29.0',
+      'alembic>=1.13.0',
+    );
+  }
+  if (config.databases?.includes('pgvector')) {
+    deps.push('pgvector>=0.2.5');
+  }
+  if (config.hasRedis) {
+    deps.push('redis[asyncio]>=5.0.0');
+  }
+  const devDeps = [
+    '',
+    '# Development',
+    'pytest>=8.0.0',
+    'pytest-asyncio>=0.23.0',
+    'pytest-cov>=5.0.0',
+    'httpx>=0.27.0',
+    'ruff>=0.4.0',
+    'mypy>=1.9.0',
+  ];
+  if (config.hasPostgres) {
+    devDeps.push('pytest-postgresql>=6.0.0');
+  }
+  return [...deps, ...devDeps].join('\n');
+}
+
+function fastApiPyproject(config) {
+  return `[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "--cov=src --cov-report=term-missing --cov-report=json -v"
+markers = [
+    "unit: unit tests — no external services",
+    "integration: tests requiring real services",
+    "eval: LLM eval tests — nightly only",
+]
+
+[tool.coverage.report]
+fail_under = 80
+omit = ["tests/*"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+select = ["E", "W", "F", "I", "N", "UP", "B", "ANN"]
+ignore = ["ANN101", "ANN102"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+`;
+}
+
+function fastApiConfig(config) {
+  return `"""
+Application configuration — loaded from environment variables.
+Never hardcode values here. Add all new config to .env.example.
+"""
+from pydantic_settings import BaseSettings
+from functools import lru_cache
+
+
+class Settings(BaseSettings):
+    environment: str = "development"
+    debug: bool = False
+    port: int = 8000
+    cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+
+    ${config.hasPostgres ? `# Database
+    database_url: str = "postgresql+asyncpg://app:app@localhost:5432/appdb"` : ''}
+    ${config.hasRedis ? `# Redis
+    redis_url: str = "redis://localhost:6379"` : ''}
+    ${config.llmProviders?.includes('anthropic') ? `# LLM
+    anthropic_api_key: str = ""` : ''}
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
+`;
+}
+
+function fastApiDatabase(config) {
+  if (!config.hasPostgres) return '# No database configured\\n';
+  return `"""
+Async SQLAlchemy database session.
+Import get_db as a FastAPI dependency in route handlers.
+"""
+from sqlalchemy.ext.asyncio import (
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from .config import settings
+
+engine = create_async_engine(
+    settings.database_url,
+    echo=settings.debug,
+    pool_pre_ping=True,
+    pool_size=10,
+    max_overflow=20,
+)
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+async def get_db() -> AsyncSession:
+    """FastAPI dependency — inject into route handlers."""
+    async with AsyncSessionLocal() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+`;
+}
+
+function fastApiBaseModel(config) {
+  return `"""
+SQLAlchemy base model.
+All database models inherit from Base.
+All models automatically get: id, created_at, updated_at
+"""
+import uuid
+from datetime import datetime
+from sqlalchemy import DateTime, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+
+class Base(DeclarativeBase):
+    """Base class for all database models."""
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+`;
+}
+
+function fastApiHealthRoute(config) {
+  return `"""
+Health check endpoint.
+Returns service status and version.
+Used by smoke tests, load balancers, and monitoring.
+"""
+from fastapi import APIRouter
+from pydantic import BaseModel
+import structlog
+
+log = structlog.get_logger()
+router = APIRouter(tags=["health"])
+
+
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    environment: str
+
+
+@router.get("/health", response_model=HealthResponse)
+async def health_check() -> HealthResponse:
+    """
+    Health check endpoint.
+    Returns 200 when the service is running correctly.
+    """
+    log.info("health.check")
+    return HealthResponse(
+        status="ok",
+        version="0.1.0",
+        environment="development",
+    )
+`;
+}
+
+function fastApiLogging(config) {
+  return `"""
+Request logging middleware using structlog.
+Logs every request with method, path, status, and duration.
+"""
+import time
+import structlog
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
+
+log = structlog.get_logger()
+
+
+class LoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        start = time.perf_counter()
+        log.info(
+            "request.start",
+            method=request.method,
+            path=request.url.path,
+        )
+        response = await call_next(request)
+        duration_ms = round((time.perf_counter() - start) * 1000, 2)
+        log.info(
+            "request.complete",
+            method=request.method,
+            path=request.url.path,
+            status=response.status_code,
+            duration_ms=duration_ms,
+        )
+        return response
+`;
+}
+
+function fastApiConftest(config) {
+  return `"""
+Shared pytest fixtures for ${config.projectName} API tests.
+"""
+import pytest
+from httpx import AsyncClient, ASGITransport
+from main import app
+
+
+@pytest.fixture
+async def client() -> AsyncClient:
+    """Async HTTP client for testing FastAPI endpoints."""
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test"
+    ) as ac:
+        yield ac
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+`;
+}
+
+function fastApiFactories(config) {
+  return `"""
+Test data factories for ${config.projectName} API tests.
+Add a factory for every domain model as stories are completed.
+"""
+from datetime import datetime
+import uuid
+
+
+def create_user(**overrides):
+    """Create a test user dict with sensible defaults."""
+    return {
+        "id": str(uuid.uuid4()),
+        "email": "test@example.com",
+        "name": "Test User",
+        "created_at": datetime.now().isoformat(),
+        **overrides,
+    }
+
+
+# Add more factories here as domain models are created
+`;
+}
+
+function fastApiHealthTest(config) {
+  return `"""
+Unit tests for the health endpoint.
+Example of the test pattern to follow for all route tests.
+"""
+import pytest
+from httpx import AsyncClient
+
+
+@pytest.mark.anyio
+async def test_health_returns_200(client: AsyncClient) -> None:
+    response = await client.get("/health")
+    assert response.status_code == 200
+
+
+@pytest.mark.anyio
+async def test_health_returns_ok_status(client: AsyncClient) -> None:
+    response = await client.get("/health")
+    data = response.json()
+    assert data["status"] == "ok"
+
+
+@pytest.mark.anyio
+async def test_health_returns_version(client: AsyncClient) -> None:
+    response = await client.get("/health")
+    data = response.json()
+    assert "version" in data
+
+
+@pytest.mark.anyio
+async def test_health_returns_environment(client: AsyncClient) -> None:
+    response = await client.get("/health")
+    data = response.json()
+    assert "environment" in data
+`;
+}
+
+function fastApiDockerfile(config) {
+  return `FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install dependencies first (cached layer)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy source
+COPY . .
+
+EXPOSE 8000
+
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+`;
 }

@@ -379,6 +379,7 @@ export async function init(projectName, cliOptions) {
     gitMode: cliOptions.gitMode || answers.gitMode || 'init-commit',
     noGit: cliOptions.git === false,
     yootiOs: cliOptions.yootiOs || answers.yootiOs || false,
+    backend: answers.backend || null,
   };
 
   // Brownfield scan
