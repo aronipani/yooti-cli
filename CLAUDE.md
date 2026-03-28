@@ -25,7 +25,7 @@ It works standalone — no Yooti OS required. Yooti OS is optional.
 ```
 yooti/
 ├── bin/
-│   └── proxiom.js          ← CLI entry point (Commander.js)
+│   └── yooti.js          ← CLI entry point (Commander.js)
 ├── src/
 │   ├── commands/
 │   │   ├── init.js         ← yooti init — scaffold generator wizard
@@ -76,7 +76,7 @@ bypass `inquirer.prompt()` entirely and go straight to `generateFiles(config)`.
 
 After fixing #1, run:
 ```bash
-node bin/proxiom.js init test-project \
+node bin/yooti.js init test-project \
   --context greenfield --stack node,react,python \
   --linter eslint --ci github-actions \
   --deploy docker --agent claude-code
@@ -91,7 +91,7 @@ Verify: `yooti.config.json` exists and is valid JSON.
 ```bash
 mkdir existing-api && cd existing-api
 echo '{"name":"existing-api"}' > package.json
-node ../bin/proxiom.js init . \
+node ../bin/yooti.js init . \
   --context brownfield --stack node --linter eslint \
   --ci github-actions --deploy docker --agent claude-code
 ```
@@ -123,7 +123,7 @@ Should work from any directory.
 ### ES Modules (critical)
 - `package.json` has `"type": "module"` — ALL files use ES module syntax
 - Import: `import { x } from './y.js'` (always include .js extension)
-- No `require()` anywhere — use `createRequire` from 'module' only in bin/proxiom.js for package.json
+- No `require()` anywhere — use `createRequire` from 'module' only in bin/yooti.js for package.json
 - No `__dirname` — use `fileURLToPath` + `dirname` from 'path'
 
 ### Template strings (critical — this caused the original bug)
@@ -148,10 +148,10 @@ Should work from any directory.
 
 ```bash
 # From yooti/ directory:
-node bin/proxiom.js --version
-node bin/proxiom.js --help
-node bin/proxiom.js init test-gf --context greenfield --stack node,react,python --linter eslint --ci github-actions --deploy docker --agent claude-code
-node bin/proxiom.js preflight  # run from inside a generated project
+node bin/yooti.js --version
+node bin/yooti.js --help
+node bin/yooti.js init test-gf --context greenfield --stack node,react,python --linter eslint --ci github-actions --deploy docker --agent claude-code
+node bin/yooti.js preflight  # run from inside a generated project
 ```
 
 ## How to install globally for live testing

@@ -482,11 +482,11 @@ The CLI package needs its own tests (not the generated project's tests):
 
 ```bash
 # Manual test checklist (run after every change)
-node bin/proxiom.js --version             # banner + version
-node bin/proxiom.js --help                # all commands listed
+node bin/yooti.js --version             # banner + version
+node bin/yooti.js --help                # all commands listed
 
 # Greenfield init
-node bin/proxiom.js init test-gf \
+node bin/yooti.js init test-gf \
   --context greenfield --stack node,react,python \
   --linter eslint --ci github-actions \
   --deploy docker --agent claude-code
@@ -498,7 +498,7 @@ rm -rf test-gf/
 
 # Brownfield init
 mkdir test-bf && echo '{}' > test-bf/package.json && cd test-bf
-node ../bin/proxiom.js init . \
+node ../bin/yooti.js init . \
   --context brownfield --stack node \
   --linter eslint --ci github-actions \
   --deploy docker --agent claude-code
@@ -508,7 +508,7 @@ cd .. && rm -rf test-bf/
 
 # Story add (inside a project)
 cd test-gf-new/
-node ../bin/proxiom.js story:add          # wizard fires
+node ../bin/yooti.js story:add          # wizard fires
 ls .agent/requirements/                   # JSON file created
 ```
 
@@ -520,7 +520,7 @@ ls .agent/requirements/                   # JSON file created
 - [ ] Greenfield generates exactly 28 files, brownfield 32 files
 - [ ] All generated files have correct content (no template placeholders left unreplaced)
 - [ ] `docker-compose.yml` starts cleanly with `docker compose up -d`
-- [ ] `node bin/proxiom.js --help` shows all commands correctly
+- [ ] `node bin/yooti.js --help` shows all commands correctly
 - [ ] Non-interactive mode (all flags) completes in < 5 seconds
 - [ ] Interactive wizard completes correctly for both GF and BF
 - [ ] `yooti story:add` produces valid JSON against the schema

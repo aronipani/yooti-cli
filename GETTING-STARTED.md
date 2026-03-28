@@ -236,7 +236,7 @@ yooti --version
 # Should show the Yooti banner and version number
 ```
 
-If you see a conflict with an existing `yooti` or `proxiom` command on
+If you see a conflict with an existing `yooti` command on
 your PATH, see the Troubleshooting module (Module 09).
 
 ---
@@ -369,7 +369,7 @@ This runs seven checks and reports pass or fail for each:
 ✓ Working tree is clean
 ✓ docker-compose.yml exists
 ✓ .claude/CLAUDE.md exists
-✓ proxiom.config.json exists and is valid JSON
+✓ yooti.config.json exists and is valid JSON
 ✓ Pipeline scripts exist
 ✓ Example artifacts exist
 ```
@@ -1408,7 +1408,7 @@ yooti configure --stage 4
 ```
 
 When you run configure, it:
-1. Updates `proxiom.config.json` with the new stage
+1. Updates `yooti.config.json` with the new stage
 2. Shows a diff of which phases changed from human to agent
 3. Tells you to run `yooti upgrade --only-prompts` to regenerate `.claude/`
 
@@ -1490,7 +1490,7 @@ yooti --version
 
 ### 9.2 — Command conflict with existing tool
 
-If another tool named `yooti` or `proxiom` exists on your PATH:
+If another tool named `yooti` exists on your PATH:
 
 ```bash
 # Find what is conflicting
@@ -1549,8 +1549,8 @@ git init
 git status              # see what is uncommitted
 git add . && git commit -m "chore: initial setup"
 
-# "proxiom.config.json is not valid JSON"
-cat proxiom.config.json | python3 -m json.tool
+# "yooti.config.json is not valid JSON"
+cat yooti.config.json | python3 -m json.tool
 # The output will show the exact line with the syntax error
 
 # "Pipeline scripts not found"
@@ -1569,7 +1569,7 @@ Check:
 
 ```bash
 # Check the stage
-cat proxiom.config.json | grep stage
+cat yooti.config.json | grep stage
 
 # Check for validated stories
 ls .agent/requirements/
@@ -1747,7 +1747,7 @@ If your issue is not covered here:
 
 4. Open an issue at github.com/yooti/cli with:
    - The output of: yooti preflight
-   - The output of: cat proxiom.config.json
+   - The output of: cat yooti.config.json
    - The specific error message you are seeing
    - Your Node.js, Docker, and Python versions
 ```

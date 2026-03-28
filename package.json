@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "description": "Autonomous SDLC scaffold — one command to a fully wired AI-driven development pipeline",
   "bin": {
-    "yooti": "./bin/proxiom.js"
+    "yooti": "./bin/yooti.js"
   },
   "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
-    "test": "node bin/proxiom.js --version"
+    "test": "node bin/yooti.js --version"
   },
   "keywords": ["scaffold", "cli", "ai", "autonomous", "sdlc", "claude"],
   "license": "MIT",
