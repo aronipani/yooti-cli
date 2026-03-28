@@ -814,7 +814,7 @@ function unitTestsCiYml(config) {
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm ci
+      - run: npm install
         working-directory: services/api
       - name: Lint
         run: ${lintCmd}
@@ -835,7 +835,7 @@ function unitTestsCiYml(config) {
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm ci
+      - run: npm install
         working-directory: frontend/dashboard
       - name: Lint
         run: ${lintCmd}
@@ -2003,6 +2003,8 @@ Blocks: T002
     write('services/api/tests/helpers/factories.ts', testHelpersFactoriesTs(config));
     write('services/api/tests/helpers/mocks.ts', testHelpersMocksTs(config));
     write('services/api/tests/unit/example.test.ts', exampleUnitTestTs(config));
+    write('services/api/Dockerfile', nodeApiDockerfile(config));
+    write('services/api/.dockerignore', nodeDockerignore());
   }
 
   // ── Python FastAPI service ──
@@ -2071,7 +2073,7 @@ ${ciServices}    steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm ci
+      - run: npm install
         working-directory: services/api
       - run: npx vitest run tests/integration/ --coverage
         working-directory: services/api
@@ -2082,7 +2084,7 @@ ${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? ` 
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
-      - run: npm ci && npx playwright install --with-deps chromium
+      - run: npm install && npx playwright install --with-deps chromium
         working-directory: frontend/dashboard
       - run: npx playwright test
         working-directory: frontend/dashboard
@@ -2272,6 +2274,22 @@ See docs/GATES.md for all five gate criteria.
 no bash required. If you see any .sh files in older projects,
 they have been replaced by .js equivalents that run natively
 on all platforms. Git Bash and WSL are not required.
+
+## First time setup note
+
+After running yooti init, run npm install once locally to generate
+package-lock.json before building Docker images:
+
+${'```'}bash
+cd services/api && npm install && cd ../..
+cd frontend/dashboard && npm install && cd ../..
+git add services/api/package-lock.json frontend/dashboard/package-lock.json
+git commit -m "chore: add package-lock.json"
+docker compose up -d
+${'```'}
+
+Once package-lock.json is committed, CI workflows can use npm ci
+for faster, deterministic installs.
 `);
 
   write('docs/GATES.md', `# Human Decision Gates — ${config.projectName}
@@ -2768,7 +2786,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy source
 COPY . .
@@ -2786,7 +2804,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy source
 COPY . .
@@ -2850,6 +2868,24 @@ async def health():
 # Register agent routers here as agent stories are completed
 # from template_agent.api import router as template_router
 # app.include_router(template_router, prefix="/agents/template")
+`;
+}
+
+// ── Node.js API Dockerfile ──
+
+function nodeApiDockerfile(config) {
+  return `FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
 `;
 }
 

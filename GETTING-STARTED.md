@@ -379,7 +379,10 @@ Do not move to the next step until all checks pass.
 
 ---
 
-### Step 7 — Install dependencies
+### Step 7 — Install dependencies (required before docker compose)
+
+Run npm install locally first to generate package-lock.json.
+Docker needs this file to build the frontend and API images.
 
 ```bash
 # Node.js layers
@@ -389,6 +392,18 @@ cd frontend/dashboard && npm install && cd ../..
 # Python layers (agents and/or batch)
 cd agents && pip install -r requirements.txt && cd ..
 cd batch/analytics && pip install -r requirements.txt && cd ../..
+```
+
+Then commit the lockfiles:
+```bash
+git add services/api/package-lock.json
+git add frontend/dashboard/package-lock.json
+git commit -m "chore: add package-lock files"
+```
+
+Then start Docker:
+```bash
+docker compose up -d
 ```
 
 ---
