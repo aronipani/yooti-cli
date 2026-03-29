@@ -64,11 +64,16 @@ export async function planAmend(taskId) {
       { type: 'input', name: 'note', message: 'Annotation / constraint for the agent', validate: v => v.length > 0 }
     ])
     const annotation = `[${role} G2 ${now}]: ${note}`
-    const placeholder = `<!-- Add annotations with: yooti plan:amend ${taskId} -->`
-    if (content.includes(placeholder)) {
-      content = content.replace(placeholder, annotation)
+    if (content.includes('## Role annotations')) {
+      content = content.replace(
+        /## Role annotations\n([\s\S]*)$/,
+        (_, existing) => {
+          const cleaned = existing.replace(/<!--[\s\S]*?-->/g, '').trim()
+          return `## Role annotations\n${cleaned ? cleaned + '\n' : ''}${annotation}\n`
+        }
+      )
     } else {
-      content = content.trimEnd() + `\n${annotation}\n`
+      content += `\n## Role annotations\n${annotation}\n`
     }
     changed = true
   }
@@ -269,14 +274,17 @@ export async function planReview(storyId) {
       const now = new Date().toISOString().split('T')[0];
       const tag = `[ARCHITECT G2 ${now}]: ${annotation}`;
 
-      if (content.includes('<!-- Add annotations')) {
-        content = content.replace(/<!--.*?-->/, tag);
-      } else if (annotSection.trim().length === 0 || annotSection.includes('<!-- ')) {
-        content = content.replace(/## Role annotations\n[\s\S]*?$/, `## Role annotations\n${tag}\n`);
+      if (content.includes('## Role annotations')) {
+        content = content.replace(
+          /## Role annotations\n([\s\S]*)$/,
+          (_, existing) => {
+            const cleaned = existing.replace(/<!--[\s\S]*?-->/g, '').trim()
+            return `## Role annotations\n${cleaned ? cleaned + '\n' : ''}${tag}\n`
+          }
+        )
       } else {
-        content += `\n${tag}`;
+        content += `\n## Role annotations\n${tag}\n`
       }
-
       writeFileSync(planPath, content);
       console.log(chalk.green(`  ✓ Annotation written to ${taskId}\n`));
       decisions.push({ taskId, decision: 'approved', annotation });
