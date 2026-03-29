@@ -1,9 +1,11 @@
 import chalk from 'chalk';
 import { execSync } from 'child_process';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+import { checkPrereqs } from '../prereqs.js';
 
 export async function preflight() {
   // If the generated preflight.js exists, delegate to it
+  // (it has its own prereq checks built in)
   if (existsSync('pipeline/scripts/preflight.js')) {
     console.log(chalk.cyan('\n◆ Running pre-flight checks...\n'));
     try {
@@ -16,7 +18,16 @@ export async function preflight() {
   }
 
   // Fallback: inline checks (for projects without the generated script)
-  console.log(chalk.cyan('\n◆ Running pre-flight checks...\n'));
+  // Run prereq checks first
+  let config = {};
+  try {
+    config = JSON.parse(readFileSync('yooti.config.json', 'utf8'));
+  } catch {
+    // no config — use defaults
+  }
+  checkPrereqs(config, { exitOnFail: true });
+
+  console.log(chalk.cyan('◆ Running project checks...\n'));
 
   const checks = [
     { name: 'Git repository', test: () => existsSync('.git') },

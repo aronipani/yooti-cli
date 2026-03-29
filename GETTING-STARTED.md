@@ -1,35 +1,30 @@
 # Yooti — Getting Started Guide
 
-### A modular playbook for the whole team
+> **Yūti** (यूति) — Sanskrit for *joining, union, or mixture*.
+> The act of bringing things together — humans and agents, each doing what they do best.
 
 ---
 
 ## How to use this guide
 
 This guide is written in modules. Each module is for a specific role.
-On Day 1, the whole team reads Module 00 together. Then each person
-reads their own module. After that, the pipeline runs itself.
+On Day 1, the whole team reads Module 00 together. Then each person reads their
+own module. After that, the pipeline runs itself.
 
-```
-MODULE    ROLE                  READ TIME    WHEN
-────────  ────────────────────  ───────────  ──────────────────────
-00        Whole team            20 minutes   Day 1 morning — together
-01        Tech Lead             45 minutes   Day 1 morning — solo
-02        Product Manager       20 minutes   Day 1 afternoon — solo
-03        Architect             20 minutes   Day 1 afternoon — solo
-04        Developer             30 minutes   Day 1 afternoon — solo
-05        QA / SDET             20 minutes   Day 1 afternoon — solo
-06        DevOps                20 minutes   Day 1 afternoon — solo
-07        Tech Lead             30 minutes   Brownfield only
-08        Whole team            15 minutes   When advancing stages
-09        Whoever needs it      As needed    When something goes wrong
-```
+    MODULE    ROLE                  READ TIME    WHEN
+    00        Whole team            20 minutes   Day 1 morning — together
+    01        Tech Lead             45 minutes   Day 1 morning — solo
+    02        Product Manager       20 minutes   Day 1 afternoon — solo
+    03        Architect             25 minutes   Day 1 afternoon — solo
+    04        Developer             30 minutes   Day 1 afternoon — solo
+    05        QA / SDET             20 minutes   Day 1 afternoon — solo
+    06        DevOps                20 minutes   Day 1 afternoon — solo
+    07        Tech Lead             30 minutes   Brownfield only
+    08        Whole team            15 minutes   When advancing stages
+    09        Whoever needs it      As needed    When something goes wrong
 
-By end of Day 1 your team should have:
-- A running local stack
-- One validated story in the queue
-- Every person knowing their gate and what they do at it
-- The agent ready to generate code
+By end of Day 1 your team should have a running local stack, at least one
+validated story, every person knowing their gate, and the agent ready to go.
 
 ---
 
@@ -46,157 +41,131 @@ By end of Day 1 your team should have:
 ### The goal
 
 You are here because you want to ship more, faster, with the team you have.
-Yooti gives you a pipeline where agents handle execution — writing code,
-writing tests, self-healing failures, generating PR bodies, deploying to
-staging — and humans handle decisions. Five decisions per sprint per story.
-Everything else is automated.
-
-This module explains the pipeline, the gates, and what each person does.
-It is the only module everyone reads. After this, each person reads their
-own module and gets to work.
+Yooti gives you a pipeline where agents handle execution — writing code, writing
+tests, self-healing failures, generating PR bodies — and humans handle decisions.
+Five decisions per sprint per story. Everything else is automated.
 
 ---
 
 ### The pipeline in plain English
 
-Every story your product manager writes goes through seven phases before
-it is deployed to production. The same seven phases, every sprint, every
-story.
+Every story your product manager writes goes through seven phases.
 
-```
-Phase 1 — Requirements ingestion
-  The agent reads the story your PM wrote and converts it into a precise
-  JSON contract: acceptance criteria in Given/When/Then format, a
-  Definition of Done, ambiguity flags, and a complexity estimate.
-  If the story is ambiguous, the agent holds it and tells the PM what
-  is missing. Nothing moves forward until the PM resolves it.
+    Phase 1 — Requirements ingestion
+      The agent reads the story and converts it into a structured contract:
+      acceptance criteria in Given/When/Then format, a Definition of Done,
+      ambiguity flags, and a complexity estimate.
+      If the story is ambiguous, the agent flags it and tells the PM what
+      is missing. Nothing moves forward until resolved.
 
-Phase 2 — Story decomposition
-  The agent breaks the validated story into tasks and writes a .plan.md
-  file for each one. The plan says exactly which files the agent is
-  allowed to touch, which are out of scope, and what the implementation
-  steps are. The architect reviews the plans before any code is written.
+    Phase 2 — Story decomposition
+      The agent breaks the story into tasks by layer and writes a .plan.md
+      file for each one. The plan says exactly which files the agent is
+      allowed to touch, which are out of scope, and what the steps are.
+      Plans only at this phase — no code written yet.
 
-Phase 3 — Environment setup
-  The pipeline creates a feature branch, runs pre-flight checks, and
-  captures a baseline snapshot of the current test suite. If any
-  baseline tests are failing, the story is blocked until DevOps fixes
-  the environment. Agents do not write code in broken environments.
+    Phase 3 — Environment setup
+      Feature branch created, preflight checks run, regression baseline
+      captured. Fully automated. No human input needed.
 
-Phase 4 — Code generation loop
-  The agent writes code, runs lint and type checks, runs unit tests, and
-  self-heals failures — up to five times. If it cannot get to green in
-  five iterations, it escalates to the developer and stops.
+    Phase 4 — Code generation
+      The agent writes failing tests first (TDD), then implementation to
+      make them pass. It runs lint, type checks, and tests — self-healing
+      up to five times. If it cannot converge, it escalates and stops.
 
-Phase 5 — Test orchestration
-  The agent runs unit tests, integration tests, regression diff against
-  the baseline, mutation testing, coverage checks, and a security scan.
-  It packages all results into an evidence file.
+    Phase 5 — Test orchestration + evidence package
+      Full test suite, coverage report, regression diff, security scan,
+      accessibility check, and a code audit against the constitution files.
+      All results packaged into .agent/evidence/[ID]/
+      A PR is not opened until all hard checks pass.
 
-Phase 6 — PR review
-  The agent opens a PR with a generated body showing every test result,
-  coverage number, mutation score, and security scan outcome. The
-  developer reads the code, edits anything they want to change, and
-  approves or rejects.
+    Phase 6 — PR review
+      The agent opens a PR with the complete evidence package as the body.
+      The developer reads the code, edits if needed, and approves or rejects.
+      This happens entirely in GitHub — no CLI command needed.
 
-Phase 7 — Deploy
-  After the PR merges, the agent deploys to staging, runs smoke tests,
-  and generates a health report. The release manager approves production.
-  The agent deploys, monitors for 15 minutes, and auto-rolls back if
-  anything fails.
-```
+    Phase 7 — Deploy
+      After PR merge, staging deploy runs, smoke tests execute, and a
+      health report is generated. The release manager approves production.
 
 ---
 
-### The five human gates — where your team decides
+### The five human gates
 
-The pipeline stops at five points and waits for a human. These are
-not rubber stamps — they are real decisions. Nothing crosses a gate
-without a person choosing to let it through.
+    GATE G1 — Product Manager
+      When:     Before the sprint starts
+      Decision: These stories are complete and unambiguous
+      Command:  yooti story:approve --all
 
-```
-GATE G1 — Product Manager
-  Happens: Before the sprint starts
-  Decision: These stories are complete, unambiguous, and ready to build
-  If you reject: Story goes back to the backlog with a flag explaining why
+    GATE G2 — Architect
+      When:     After agent writes plans — before any code runs
+      Decision: These implementation plans are structurally sound
+      Command:  yooti plan:review STORY-001
 
-GATE G2 — Architect
-  Happens: After the agent writes .plan.md files — before any code runs
-  Decision: These implementation plans are structurally sound
-  If you reject: Plans go back to the agent for a rewrite
+    GATE G3 — Developer
+      When:     After the agent opens the PR
+      Decision: This code is correct and safe to merge
+      Where:    GitHub — no CLI command needed
+      Note:     You can edit code directly in the branch before approving
 
-GATE G3 — Developer
-  Happens: After the agent opens the PR
-  Decision: This code is correct and safe to merge
-  If you reject: The agent gets your comments as a correction prompt
-  Special: You can edit the code directly in the branch before approving
+    GATE G4 — QA / SDET
+      When:     After evidence package is generated
+      Decision: Quality evidence is sufficient
+      Command:  yooti qa:review STORY-001
 
-GATE G4 — QA / SDET
-  Happens: After the agent produces the evidence package
-  Decision: The quality evidence is sufficient — test results, coverage,
-            mutation score, security scan
-  If you reject: Story goes back to Phase 4 for a rewrite
+    GATE G5 — Release Manager
+      When:     After staging deploy and health report
+      Decision: Safe to deploy to production
 
-GATE G5 — Release Manager
-  Happens: After staging deploy and health report
-  Decision: Safe to deploy to production
-  If you reject: Story stays in staging for investigation
-```
+---
+
+### Ticket IDs — use your own convention
+
+Yooti accepts any ticket ID format. Use whatever your team already uses.
+
+    STORY-001   BUG-042   FEAT-007   PROJ-123   ISS-007
+
+All commands accept any format. Import sample stories with a custom prefix:
+
+    yooti story:sample --app ecommerce --prefix PROJ
+    # Creates PROJ-001, PROJ-002 etc.
 
 ---
 
 ### Your team map
 
-```
-WHO YOU ARE           YOUR GATE    YOUR MODULE    TIME COMMITMENT PER STORY
-────────────────────  ───────────  ─────────────  ──────────────────────────
-Product Manager       G1           Module 02      20 min (story writing)
-                                                  10 min (ambiguity review)
-
-Architect             G2           Module 03      30 min (.plan review)
-
-Developer             G3           Module 04      45 min (PR review + edit)
-
-QA / SDET             G4           Module 05      20 min (evidence review)
-
-DevOps                G5 support   Module 06      Setup only, then on-call
-
-Release Manager       G5           Module 06      10 min (deploy approval)
-
-Tech Lead             Setup        Module 01      Day 1 setup, then G3 too
-```
+    WHO YOU ARE           YOUR GATE    YOUR MODULE    TIME PER STORY
+    Product Manager       G1           Module 02      20 min writing + 10 min review
+    Architect             G2           Module 03      30 min plan review
+    Developer             G3           Module 04      45 min PR review + edit
+    QA / SDET             G4           Module 05      20 min evidence review
+    DevOps                G5 support   Module 06      Setup only, then on-call
+    Release Manager       G5           Module 06      10 min deploy approval
+    Tech Lead             Setup        Module 01      Day 1 setup, then G3 too
 
 ---
 
-### What changes at each adoption stage
+### Adoption stages
 
-Your team chose a starting stage. Here is what that means in practice:
+    STAGE 1 — Foundation
+      Agent parses stories. Team writes all code. Same as current workflow
+      with better structure and CI. yooti configure --stage 2 when ready.
 
-```
-STAGE 1 — FOUNDATION
-  You installed Yooti for the framework and CI.
-  The agent parses your stories. Your team writes all the code.
-  This is the same as your current workflow with better structure.
-  When ready to advance: run yooti configure --stage 2
+    STAGE 2 — Build
+      Agent writes plan files. Team writes code from the plans.
+      Architect reviews plans at G2 before coding starts.
+      yooti configure --stage 3 when ready.
 
-STAGE 2 — BUILD
-  The agent writes .plan.md files. Your team writes the code from plans.
-  Your architect reviews plans at Gate G2 before you start coding.
-  When ready to advance: run yooti configure --stage 3
+    STAGE 3 — Review  <- most teams start here
+      Agent writes code and tests. Developer reviews the PR.
+      Team controls every deployment. Recommended starting point.
 
-STAGE 3 — REVIEW  ← most teams start here
-  The agent writes the code and tests. Your developer reviews the PR.
-  Your team controls every deployment — staging and production.
-  This is the recommended starting point for most teams.
+    STAGE 4 — Deploy
+      Agent codes, tests, and deploys to staging automatically.
+      Release manager approves production only.
 
-STAGE 4 — DEPLOY
-  The agent codes, tests, and deploys to staging automatically.
-  Your release manager approves production only.
-
-STAGE 5 — AUTONOMOUS
-  The agent runs all seven phases.
-  Your team owns the five gates and nothing else.
-```
+    STAGE 5 — Autonomous
+      Agent runs all seven phases. Team owns five gates only.
 
 Now each person reads their own module. See you at the first sprint.
 
@@ -206,268 +175,106 @@ Now each person reads their own module. See you at the first sprint.
 
 # MODULE 01 — Tech Lead
 
-## Day 1 setup — scaffold, local stack, and first preflight
+## Day 1 setup
 
-**You are the person who runs yooti init. 45 minutes.**
-
----
-
-### Before you start
-
-Make sure you have:
-
-```bash
-node --version          # must be >= 20
-git --version           # any recent version
-docker --version        # must be running
-python3 --version       # must be >= 3.12
-```
-
-If anything is missing, install it before continuing. The scaffold will
-work without Docker and Python but the local stack will not run.
+**You run yooti init. 45 minutes.**
 
 ---
 
-### Step 1 — Install Yooti
+### Step 1 — Check prerequisites
 
-```bash
-npm install -g @yooti/cli
-yooti --version
-# Should show the Yooti banner and version number
-```
+    yooti doctor
 
-If you see a conflict with an existing `yooti` command on
-your PATH, see the Troubleshooting module (Module 09).
+Or manually:
 
----
+    node --version          # must be >= 20
+    git --version           # any recent version
+    gh --version            # GitHub CLI — for automatic PRs
+    docker --version        # must be running
+    python3 --version       # must be >= 3.12
+    claude --version        # Claude Code
 
-### Step 2 — Run the wizard
+Install anything missing:
 
-Navigate to wherever your team keeps projects and run:
+    # Mac
+    brew install node@20 git gh python@3.12
+    npm install -g @anthropic-ai/claude-code
 
-```bash
-cd ~/projects
-yooti init
-```
-
-The wizard asks eight questions. Here is what each one means:
-
-```
-QUESTION                  WHAT TO CHOOSE                    WHY
-────────────────────────  ────────────────────────────────  ─────────────────────
-Project type              full / web / agent                What you are building
-Project context           greenfield (new)                  New repo from scratch
-                          brownfield (existing)             See Module 07
-Project name              your-product-name                 Creates a folder
-Application stack         node, react, python               Tick all that apply
-Linter                    eslint (default) or biome         biome is faster
-CI provider               github-actions (default)          Where your CI runs
-Pipeline stage            3 — Review (recommended)          Start here
-Git repository            init + commit (recommended)       First commit included
-```
-
-When the wizard finishes you will see a checklist of generated files
-and a "Ready" message with next steps.
+    # Windows
+    winget install OpenJS.NodeJS.LTS Git.Git GitHub.cli Python.Python.3.12
+    npm install -g @anthropic-ai/claude-code
 
 ---
 
-### Step 3 — Open in VS Code
+### Step 2 — Install Yooti
 
-```bash
-cd your-product-name
-code .
-```
-
-VS Code will detect the `.claude/` folder. If you have Claude Code
-installed it will read `CLAUDE.md` automatically. You should see
-Claude Code load the project context in the sidebar.
-
-If you do not have Claude Code installed:
-- Go to the VS Code Extensions panel
-- Search for "Claude Code" by Anthropic
-- Install and sign in
+    npm install -g @yooti/cli
+    yooti doctor      # verify everything is ready
 
 ---
 
-### Step 4 — Configure your environment
+### Step 3 — Run the wizard
 
-```bash
-cp .env.example .env
-```
+    cd ~/projects
+    yooti init
 
-Open `.env` and fill in the required values:
+The wizard asks eight questions:
 
-```bash
-# Required for the API service
-DATABASE_URL=postgresql://app:app@localhost:5432/appdb
-REDIS_URL=redis://localhost:6379
-NODE_ENV=development
-PORT=3000
-
-# Required for agents (if type=full or type=agent)
-ANTHROPIC_API_KEY=your-key-here        # from console.anthropic.com
-# or
-OPENAI_API_KEY=your-key-here           # from platform.openai.com
-
-# Required for agent observability
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your-key-here        # from smith.langchain.com
-LANGCHAIN_PROJECT=your-product-name
-
-# Frontend
-VITE_API_URL=http://localhost:3000
-```
-
-Do not commit `.env`. It is already in `.gitignore`.
+    Project name      your-product-name
+    Project type      full / web / agent
+    Context           greenfield (new repo) or brownfield (see Module 07)
+    Stack             node, react, python — tick all that apply
+    Linter            eslint (default) or biome (faster)
+    CI                github-actions (default)
+    Stage             3 — Review (recommended)
+    Agent             claude-code (default) or codex
 
 ---
 
-### Step 5 — Start the local stack
+### Step 4 — Start the local stack
 
-```bash
-docker compose up -d
-```
+    cd your-product-name
+    cp .env.example .env
+    # Edit .env — add API keys and secrets
 
-This starts all services defined in `docker-compose.yml`. Depending on
-your project type this includes some combination of:
-
-```
-postgres    → http://localhost:5432   (database)
-redis       → http://localhost:6379   (cache)
-api         → http://localhost:3000   (Node.js API)
-frontend    → http://localhost:5173   (React dev server)
-agents      → http://localhost:8001   (LangGraph API)
-chroma      → http://localhost:8000   (vector store, if selected)
-```
-
-Check everything is running:
-
-```bash
-docker compose ps
-# All services should show "running"
-```
-
-If any service fails to start, check the logs:
-
-```bash
-docker compose logs api         # check API logs
-docker compose logs postgres    # check database logs
-```
+    docker compose up -d
+    docker compose ps     # all services should show: healthy
 
 ---
 
-### Step 6 — Run pre-flight checks
+### Step 5 — Run preflight
 
-```bash
-yooti preflight
-```
+    yooti preflight
 
-This runs seven checks and reports pass or fail for each:
+Expected output:
 
-```
-✓ Git repository exists
-✓ Working tree is clean
-✓ docker-compose.yml exists
-✓ .claude/CLAUDE.md exists
-✓ yooti.config.json exists and is valid JSON
-✓ Pipeline scripts exist
-✓ Example artifacts exist
-```
-
-If any check fails, the preflight output tells you exactly what to fix.
-Do not move to the next step until all checks pass.
+    ✓ Git repository exists
+    ✓ Working tree is clean
+    ✓ docker-compose.yml exists
+    ✓ .claude/CLAUDE.md exists
+    ✓ yooti.config.json is valid
+    ✓ Pipeline scripts exist
+    ✓ Example artifacts exist
+    7/7 checks passed
 
 ---
 
-### Step 7 — Install dependencies (required before docker compose)
+### Step 6 — Import demo stories (optional)
 
-Run npm install locally first to generate package-lock.json.
-Docker needs this file to build the frontend and API images.
+    yooti story:sample --app ecommerce --sprint 1
+    yooti story:approve --all
+    yooti sprint:start
 
-```bash
-# Node.js layers
-cd services/api && npm install && cd ../..
-cd frontend/dashboard && npm install && cd ../..
+Then in Claude Code:
 
-# Python layers (agents and/or batch)
-cd agents && pip install -r requirements.txt && cd ..
-cd batch/analytics && pip install -r requirements.txt && cd ../..
-```
-
-Then commit the lockfiles:
-```bash
-git add services/api/package-lock.json
-git add frontend/dashboard/package-lock.json
-git commit -m "chore: add package-lock files"
-```
-
-Then start Docker:
-```bash
-docker compose up -d
-```
+    Proceed to Phase 2 for all new stories.
 
 ---
 
-### Step 8 — Run the baseline tests
+### Step 7 — Hand off to the team
 
-Before the team writes any stories, make sure the baseline is clean:
-
-```bash
-# Node.js unit tests
-cd services/api && npm test && cd ../..
-
-# React unit tests
-cd frontend/dashboard && npm test && cd ../..
-
-# Python tests (agents)
-cd agents && pytest tests/unit/ -m "not eval" && cd ..
-```
-
-All tests should pass. If they do not, check the Troubleshooting module.
-
----
-
-### Step 9 — Take the baseline snapshot
-
-```bash
-yooti sprint:start
-# This captures a regression baseline in .agent/snapshots/
-```
-
-This baseline is used by the pipeline to run regression diffs. Every
-time the agent generates code, it diffs the new test results against
-this snapshot to catch regressions before the PR opens.
-
----
-
-### Step 10 — Send team onboarding links
-
-Your setup is complete. Now send each team member their module:
-
-```
-Product Manager  → Module 02
-Architect        → Module 03
-Developer        → Module 04 (you also read this)
-QA / SDET        → Module 05
-DevOps           → Module 06
-```
-
-Tell them the repo URL, tell them to clone it, and tell them their
-first task is to read their module. The tech lead's job on Day 1 is
-done when the stack is running and the team is reading.
-
----
-
-### What success looks like at end of Day 1
-
-```
-✓ yooti preflight passes all 7 checks
-✓ docker compose ps shows all services running
-✓ All baseline tests pass
-✓ .agent/snapshots/ has a baseline file
-✓ Team members have cloned the repo and read their modules
-✓ First story added by PM (Module 02)
-```
+Send each person their module link. Your role from here is Gate G3
+plus unblocking the team when escalations arise.
 
 ---
 
@@ -475,162 +282,70 @@ done when the stack is running and the team is reading.
 
 # MODULE 02 — Product Manager
 
-## Writing stories that the agent can actually build
+## Writing stories and Gate G1
 
-**You own Gate G1. 20 minutes to read, then ongoing.**
-
----
-
-### Your role in the pipeline
-
-You are the starting point. Nothing the agent builds exists without a
-story you wrote. Your job at Gate G1 is to make sure every story is
-complete, unambiguous, and ready to build before the sprint starts.
-
-The agent is very good at building things. It is not good at guessing
-what you meant. A vague story produces vague code. A precise story
-produces precise code. This module shows you what precise looks like.
+**Your gate is G1. 20 minutes.**
 
 ---
 
-### Step 1 — Add your first story
+### How to write a good story
 
-From the project root:
+Stories must be specific enough for the agent to generate code from them.
 
-```bash
-yooti story:add
-```
+**Good — specific and testable:**
 
-The wizard asks for:
+    As a registered shopper
+    I want to add items to my cart and see the updated item count
+    So that I can track what I intend to buy
 
-```
-FIELD               WHAT TO ENTER
-──────────────────  ────────────────────────────────────────────────────
-Story ID            STORY-001 (increment for each story)
-Title               Short description — "User can reset their password"
-Type                feature / bugfix / refactor / chore
-Priority            P0 (critical) / P1 (high) / P2 (medium) / P3 (low)
-Acceptance criteria At least one Given/When/Then statement
-```
+**Bad — too vague:**
+
+    As a user I want a shopping cart so that I can shop
+
+The agent needs: what triggers the action, what the result is, what
+error states look like, and performance expectations.
 
 ---
 
-### Step 2 — Write acceptance criteria the agent can test
+### Adding stories
 
-The most important part of your story is the acceptance criteria. Each
-criterion must be testable — the agent writes a test for each one.
+    yooti story:add
 
-**Format that works:**
+The wizard asks for ID, title, type, acceptance criteria in Given/When/Then
+format, non-functional requirements, priority, and complexity.
 
-```
-Given: [starting state]
-When:  [action taken]
-Then:  [expected outcome]
-```
+Or import from a JSON file:
 
-**Example — good:**
+    yooti story:import --file my-stories.json
 
-```
-STORY-001: User can reset their password
+Or see the format with demo stories:
 
-Given: a registered user who has forgotten their password
-When:  they submit their email address on the reset password page
-Then:  they receive an email with a reset link within 60 seconds
-       the reset link expires after 24 hours
-       submitting an invalid email shows an error message
-       submitting a valid email always shows a success message
-       (even if no account exists — security requirement)
-```
-
-**Example — too vague:**
-
-```
-STORY-001: Password reset
-
-Given: a user
-When:  they reset their password
-Then:  it works
-```
-
-The agent cannot write a test for "it works." It can write a test for
-"they receive an email with a reset link within 60 seconds."
+    yooti story:sample --app ecommerce --sprint 1
 
 ---
 
-### Step 3 — Review the validation output
+### Gate G1 — approving stories
 
-After you submit the story, the agent validates it and produces a
-`.agent/requirements/STORY-001-validated.json` file. It also prints
-a summary showing:
+After stories are written and ready:
 
-```
-✓ Story parsed successfully
-✓ 4 acceptance criteria found
-✓ All criteria are testable
-⚠ 1 ambiguity flag: "within 60 seconds" — is this a hard requirement
-  or a guideline? If the email arrives at 61 seconds, does the test fail?
-```
+    yooti story:approve --all     # approve all at once
+    yooti story:approve STORY-001 # or one at a time
 
-If there are ambiguity flags, you must resolve them before the sprint
-starts. Edit the story to make the flagged criteria explicit, then
-run `yooti story:add` again with the corrected version.
+For each story, confirm it is:
+- Complete — all AC defined
+- Testable — each AC can be verified with a test
+- Unambiguous — the agent can implement without guessing
+
+If a story has ambiguity flags, resolve them before approving.
 
 ---
 
-### Step 4 — Sign off at Gate G1
+### When the agent flags an ambiguity
 
-Before the sprint starts, review all validated stories in
-`.agent/requirements/`. For each one, confirm:
+    ls .agent/escalations/
+    cat .agent/escalations/STORY-001-AMBIGUITY.md
 
-```
-□ The title describes what the user can do — not what the system does
-□ Every acceptance criterion has a Given, When, and Then
-□ Every Then is something you could verify by looking at the screen
-  or checking a database — not "it feels right" or "it works"
-□ Edge cases are explicit — what happens when input is invalid?
-□ Security requirements are spelled out — not implied
-□ The priority reflects actual business impact
-```
-
-When you are satisfied, tell the Tech Lead that Gate G1 is signed.
-The sprint can start.
-
----
-
-### What to do when a story comes back from the agent
-
-Sometimes the agent flags a story as blocked mid-sprint because it
-discovered an ambiguity during code generation that was not visible
-at requirements time. When this happens you will see a file in
-`.agent/escalations/` with a specific question.
-
-Read the question. Answer it in plain English. Give your answer to
-the developer, who feeds it back to the agent as a correction prompt.
-The agent resumes from where it stopped.
-
----
-
-### Common PM mistakes
-
-```
-MISTAKE                               FIX
-────────────────────────────────────  ────────────────────────────────────
-Writing from the system's perspective  Write from the user's perspective
-"The system sends an email"            "The user receives an email"
-
-Implicit edge cases                    Make every edge case explicit
-"Invalid input shows an error"         "An email address without @ shows
-                                        the message 'Please enter a valid
-                                        email address'"
-
-Vague time requirements                Use measurable numbers
-"The page loads quickly"               "The page loads in under 2 seconds
-                                        on a 4G connection"
-
-Missing security requirements          State them explicitly
-(implied by other stories)             "Unauthenticated users cannot access
-                                        this endpoint"
-```
+Update the story, delete the escalation file. The agent resumes.
 
 ---
 
@@ -638,145 +353,81 @@ Missing security requirements          State them explicitly
 
 # MODULE 03 — Architect
 
-## Reviewing .plan files before the agent writes a single line of code
+## Reviewing plans at Gate G2
 
-**You own Gate G2. 20 minutes to read, then 30 minutes per sprint.**
-
----
-
-### Your role in the pipeline
-
-You are the second gate. After the PM signs off stories, the agent writes
-`.plan.md` files — one per task — that describe exactly what it intends
-to do before it does it. Your job is to review those plans and decide
-whether the implementation approach is sound before any code is written.
-
-This is the highest-leverage gate in the pipeline. A correction at G2
-takes 10 minutes. The same correction after the agent has written 400
-lines of code takes much longer.
+**Your gate is G2. 25 minutes.**
 
 ---
 
-### Step 1 — Find the plans to review
+### What a plan file contains
 
-After the PM signs off and the sprint starts, plans appear in:
+Each task has a .plan.md file in .agent/plans/:
 
-```
-.agent/plans/
-├── STORY-001-T001.plan.md    ← Task 1 of Story 001
-├── STORY-001-T002.plan.md    ← Task 2 of Story 001
-└── STORY-001-T003.plan.md    ← Task 3 of Story 001
-```
+    STORY-001-T001 — Product Database Models
+    Status: PENDING
+    Layer: database
 
-Each `.plan.md` file has this structure:
+    Files in scope:
+      CREATE: src/models/product.py
+      CREATE: src/models/category.py
+      MODIFY: src/models/__init__.py
+      OUT OF SCOPE: API routes, frontend
 
-```markdown
-# STORY-001-T001 — Add password reset endpoint
+    AC covered:
+      AC-1 — product fields established
+      AC-2 — category enables filtering
 
-## Scope
-Files to CREATE:
-- services/api/src/routes/auth/reset-password.ts
-- services/api/src/services/email.service.ts
+    Implementation steps:
+      1. Write failing tests for Product model
+      2. Create Product model
+      3. Create migration
 
-Files to MODIFY:
-- services/api/src/routes/auth/index.ts
-
-Files OUT OF SCOPE (do not touch):
-- services/api/src/routes/users/
-- frontend/dashboard/
-
-## Implementation steps
-1. Create the reset-password route handler
-2. Add email service with SendGrid integration
-3. Add expiry logic (24 hours)
-4. Register route in auth index
-
-## Acceptance criteria covered
-- AC-1: User receives email within 60 seconds
-- AC-2: Reset link expires after 24 hours
-
-## Dependencies
-- Requires STORY-001-T002 (email template) to be complete first
-```
+    Dependencies:
+      Depends on: none
+      Blocks: STORY-001-T002
 
 ---
 
-### Step 2 — Review each plan
+### The G2 review command
 
-For each plan, check:
+    yooti plan:review STORY-001
 
-```
-□ SCOPE IS CORRECT
-  The files listed make sense for this task.
-  No files are missing that should be changed.
-  No files are listed that should not be touched.
+Walks through each task interactively. For each task choose:
+- Approve
+- Approve with annotation — add a constraint for the agent
+- Request revision — plan needs changes
 
-□ APPROACH IS SOUND
-  The implementation steps describe the right solution.
-  No existing patterns or conventions are being violated.
-  No new dependencies are being introduced without discussion.
-
-□ DEPENDENCIES ARE CORRECT
-  Tasks that depend on other tasks are sequenced correctly.
-  No circular dependencies.
-
-□ AC COVERAGE IS COMPLETE
-  Every acceptance criterion from the story is covered
-  by at least one task in the plan set.
-
-□ SCOPE DOES NOT BLEED
-  The plan does not list files from unrelated services.
-  The agent is not proposing to refactor things not in the story.
-```
+After all tasks approved, Gate G2 is signed automatically.
 
 ---
 
-### Step 3 — Approve or correct
+### The G2 checklist
 
-**If the plan is correct:**
+    DECOMPOSITION
+    □ Tasks split by layer — not by AC
+    □ Task count matches complexity (M = 2-3, L = 3-4, XL = 4-5)
+    □ Each task touches no more than 5-7 files
+    □ Every AC covered by at least one task
 
-Create a file `.agent/gates/STORY-001-G2-approved.md` with your sign-off:
+    SCOPE
+    □ Files in CREATE/MODIFY are necessary
+    □ OUT OF SCOPE section is complete
+    □ No file appears in two tasks
 
-```markdown
-# Gate G2 — Architecture Review
-Story: STORY-001
-Approved by: [your name]
-Date: [today]
-Notes: Approach is sound. Approved to proceed.
-```
-
-**If the plan needs changes:**
-
-Edit the `.plan.md` file directly with your corrections, or write your
-feedback in `.agent/escalations/STORY-001-G2-feedback.md`. The agent
-reads the escalations folder and rewrites the plan based on your feedback.
-
-The agent then produces a new plan. Review again. Approve when satisfied.
+    DEPENDENCIES
+    □ Database before API, API before frontend
+    □ No circular dependencies
 
 ---
 
-### What to watch for as Architect
+### Adding annotations
 
-```
-PATTERN                               ACTION
-────────────────────────────────────  ────────────────────────────────────
-Plan touches authentication code       Review extra carefully — auth bugs
-                                        are security issues
+    yooti plan:amend STORY-001-T002
+    # Choose: Add role annotation
+    # Enter: Use repository pattern — no direct DB queries in routes
 
-Plan introduces a new dependency       Approve explicitly — note it in
-(new npm package, new Python lib)      your G2 sign-off
-
-Plan modifies a shared service         Check that other stories in the
-                                        sprint are not touching the same
-                                        files (merge conflict risk)
-
-Plan proposes a new pattern            Decide if it belongs in the
-not in the existing codebase           Pattern Mandate or should follow
-                                        existing conventions
-
-Plan scope seems too large for         Split the task — ask the agent to
-one task (> 5 files)                   decompose further before approving
-```
+The annotation is written into the plan file. The agent reads it
+before writing any code for that task.
 
 ---
 
@@ -784,169 +435,95 @@ one task (> 5 files)                   decompose further before approving
 
 # MODULE 04 — Developer
 
-## Reviewing what the agent built — your most important 45 minutes
+## Reviewing PRs at Gate G3
 
-**You own Gate G3. This is the highest-value gate in the pipeline.**
-
----
-
-### Your role in the pipeline
-
-The agent wrote the code. Your job is not to trust it — your job is to
-verify it. You are the human who decides whether this code is correct,
-safe to merge, and something you would be comfortable owning in production.
-
-You have four options at Gate G3:
-
-```
-OPTION 1: Approve as-is
-  The code is correct. The tests pass. Merge it.
-
-OPTION 2: Edit and approve
-  The code is almost right. Edit it directly in the branch,
-  run the tests yourself, then approve.
-
-OPTION 3: Request corrections
-  The code has issues the agent can fix. Write your feedback
-  as a comment on the PR. The agent generates a correction,
-  opens a new commit on the same branch, and you review again.
-
-OPTION 4: Reject and return to planning
-  The implementation approach is fundamentally wrong.
-  The story goes back to Phase 2 for a full replan.
-  This should be rare if G2 was done correctly.
-```
+**Your gate is G3. 30 minutes.**
 
 ---
 
-### Step 1 — Open the PR
+### Gate G3 happens in GitHub
 
-The agent opens the PR automatically after Phase 5 completes. You will
-receive a notification through GitHub (or your configured CI provider).
+When the agent opens a PR, review it in GitHub as you normally would.
+Read the code. Edit if needed. Approve and merge. No CLI command required.
 
-The PR body contains:
-
-```
-SECTION                 WHAT IT SHOWS
-──────────────────────  ────────────────────────────────────────────────
-Story summary           Which story, which tasks, which acceptance criteria
-AC status table         Each acceptance criterion: PASS / FAIL / PARTIAL
-Files changed           Every file the agent touched, with line counts
-Test results            Unit: X/X pass, Integration: X/X pass
-Coverage report         Overall: X%, New code: X%
-Regression diff         0 newly failing tests (or list of regressions)
-Mutation score          X% — how well tests catch deliberate bugs
-Security scan           0 HIGH/CRITICAL findings (or list of issues)
-Agent execution log     How many iterations, what failure types were fixed
-Deliberate decisions    Choices the agent made that you should know about
-Uncovered branches      Lines not covered — explained, not hidden
-```
-
-Read the entire PR body before looking at any code.
+When you merge, the gate-g3.yml GitHub Action automatically creates the
+gate file and the pipeline continues.
 
 ---
 
-### Step 2 — Read the code
+### What to look for in a PR
 
-Go through every changed file. You are looking for:
+The PR body shows: AC coverage, test results, coverage %, security scan,
+files changed, and deliberate decisions the agent made.
 
-```
-□ CORRECTNESS
-  Does the code do what the acceptance criteria say it should do?
-  Not just "does it pass the tests" — does it actually do the right thing?
+**G3 checklist:**
 
-□ EDGE CASES
-  Did the agent handle the edge cases the PM specified?
-  Are there edge cases the PM missed that this code should handle?
-
-□ SECURITY
-  Are inputs validated?
-  Are there any SQL injection, XSS, or CSRF risks?
-  Are secrets handled correctly (env vars, not hardcoded)?
-  Are authentication checks in the right places?
-
-□ PERFORMANCE
-  Any N+1 queries?
-  Any operations that should be async but are not?
-  Any missing indexes that would make this slow at scale?
-
-□ CONVENTIONS
-  Does the code follow your team's patterns?
-  Are naming conventions consistent with the rest of the codebase?
-  Are error messages in the right format?
-
-□ TESTS
-  Do the tests actually test what they claim to test?
-  Are there missing test cases for important edge cases?
-  Are mocks realistic?
-```
+    □ Code does what the AC says — not just passes tests
+    □ Tests test meaningful behaviour — not just coverage numbers
+    □ No security issues — auth checks, SQL injection, hardcoded secrets
+    □ All packages in requirements.txt or package.json
+    □ Patterns match the constitution files for this layer
+    □ No files outside plan scope
+    □ Error handling correct — no bare except or empty catch
+    □ No hardcoded values that should be env vars
+    □ Error messages are user-friendly — no stack traces exposed
 
 ---
 
-### Step 3 — Make your decision
+### Your four options at G3
 
-**To edit code directly:**
+**Approve as-is:**
+Click Approve + Merge in GitHub.
 
-```bash
-git fetch origin
-git checkout feature/STORY-001
+**Edit and approve:**
 
-# Make your changes
-# Then run tests to verify
-npm test                          # Node.js
-pytest tests/unit/ -m "not eval"  # Python
+    git checkout feature/STORY-001
+    # Make changes
+    git add . && git commit -m "fix: correct edge case"
+    git push
+    # Then approve in GitHub
 
-git add .
-git commit -m "fix: correct edge case in reset password route"
-git push origin feature/STORY-001
-```
+**Inject a correction:**
 
-Then approve the PR on GitHub. Your commits and the agent's commits
-both appear in the PR history — this is intentional and correct.
+    yooti correct:inject STORY-001-T002
+    # Describe the issue precisely
+    # Agent fixes and updates the PR
+    # Review again
 
-**To request agent corrections:**
-
-Write a PR comment that is specific and actionable:
-
-```
-GOOD comment:
-"The expiry check on line 47 uses Date.now() which returns milliseconds
-but the expires_at field is stored in seconds. This comparison will never
-be true. Fix the comparison to use Date.now() / 1000."
-
-BAD comment:
-"The expiry logic seems wrong"
-```
-
-The agent reads specific comments and generates a targeted fix.
-Vague comments produce vague fixes.
+**Reject:**
+Close the PR in GitHub with a comment. Story returns to Phase 4.
 
 ---
 
-### Step 4 — After approval
+### Prompt library for Phase 4
 
-Once you approve, the PR merges automatically. The Deploy Agent takes
-over: staging deploy, smoke tests, health report, then Gate G5 for
-the Release Manager.
+Your docs/PROMPTS.md has the exact prompt for every situation.
 
-You do not need to monitor the deployment. If anything fails in staging
-you will be notified.
+    # Start code generation
+    Proceed to Phase 4 for all approved stories in dependency order.
+
+    # After resolving an escalation
+    Read .agent/escalations/STORY-001-INSTALL_REQUIRED.md
+    The issue has been resolved. Continue with STORY-001-T002.
+
+    # After injecting a correction
+    Read .agent/corrections/STORY-001-T002-[timestamp].md
+    Apply the correction. Re-run the quality loop.
 
 ---
 
-### Patterns that should always trigger a rejection
+### When the agent escalates
 
-```
-□ Agent hallucinated an import that does not exist in package.json
-□ Agent used a function from a library that has a different API
-  than what the agent wrote (check the actual library docs)
-□ Authentication or authorisation logic is missing on a protected route
-□ Agent wrote console.log or print statements with sensitive data
-□ Agent hardcoded a value that should come from an environment variable
-□ Test mocks return data that could never come from the real service
-□ Coverage is technically >= 90% but the tests are not testing anything
-  meaningful (assertions always pass, no edge cases covered)
-```
+    ls .agent/escalations/
+    cat .agent/escalations/STORY-001-T002-SCOPE_ERROR.md
+
+    SCOPE_ERROR       Developer + Architect approve scope change
+    ENV_ERROR         DevOps fixes the environment
+    AMBIGUITY         PM clarifies the requirement
+    ARCH_ERROR        Architect reviews the approach
+    INSTALL_REQUIRED  Run the install command shown, then delete file
+
+Fix the issue, delete the file, tell the agent to continue.
 
 ---
 
@@ -954,131 +531,70 @@ you will be notified.
 
 # MODULE 05 — QA / SDET
 
-## Reviewing the evidence package — quality sign-off at Gate G4
+## Test planning and Gate G4
 
-**You own Gate G4. 20 minutes to read, then 20 minutes per story.**
-
----
-
-### Your role in the pipeline
-
-By the time a story reaches you at Gate G4, the agent has already run
-unit tests, integration tests, regression diff, mutation testing, coverage
-analysis, and a security scan. Your job is not to run more tests — your
-job is to evaluate whether the evidence the agent produced is sufficient
-to ship this story.
-
-You are the quality conscience of the team. The agent ran the tests.
-You decide if the tests were the right tests.
+**Your gate is G4. 20 minutes.**
 
 ---
 
-### Step 1 — Find the evidence package
+### Creating a QA test plan
 
-After Phase 5 completes, the evidence package is at:
+Before Phase 4 starts:
 
-```
-.agent/evidence/STORY-001/
-├── test-results.json         ← Pass/fail for every test
-├── coverage-summary.json     ← Coverage per file
-├── regression-diff.json      ← New failures vs baseline
-├── mutation-score.json       ← Which mutations survived
-├── security-scan.json        ← Snyk + Semgrep findings
-└── pr-body.md                ← Generated PR body (human-readable summary)
-```
+    yooti qa:plan STORY-001
 
-Start with `pr-body.md` — it summarises everything in human-readable
-format. Then dig into specific files if you need detail.
+Choose: test layers, security tests, performance thresholds, accessibility
+requirements, test data needs. Plan written to .agent/qa/STORY-001-test-plan.md.
 
 ---
 
-### Step 2 — Run the quality checklist
+### Adding specific test requirements
 
-```
-UNIT TESTS
-□ All unit tests pass (100% required)
-□ Test names describe what they are testing — not "test_1"
-□ Each test has a meaningful assertion — not just "assert True"
-□ Edge cases from the acceptance criteria have tests
-□ Error paths have tests — not just happy paths
+    yooti test:require STORY-001
 
-INTEGRATION TESTS
-□ All integration tests pass (100% required)
-□ Every acceptance criterion has at least one integration test
-□ Tests run against real services (database, cache) not mocks
-□ Setup and teardown are correct — tests do not pollute each other
-
-REGRESSION DIFF
-□ Zero newly failing tests (hard requirement)
-□ If any tests were removed, there is an explanation in the PR body
-
-MUTATION SCORE
-□ Score is >= 85% (hard requirement for approval)
-□ If score is 70–84%, review which mutations survived
-  — are they testing trivial code, or is real logic uncovered?
-□ If score is < 70%, reject — the tests exist but do not protect anything
-
-COVERAGE
-□ Overall coverage >= 80%
-□ New code coverage >= 90%
-□ Uncovered branches are documented and intentional — not gaps
-
-SECURITY SCAN
-□ Zero HIGH or CRITICAL Snyk findings (hard requirement)
-□ Zero Semgrep findings (hard requirement)
-□ MEDIUM findings: review and document if intentionally accepted
-
-ACCESSIBILITY (frontend stories)
-□ Zero axe-core violations
-□ Playwright responsive tests pass at 375px, 768px, 1280px
-□ Lighthouse performance score >= 80
-□ Lighthouse accessibility score >= 90
-```
+Choose from: unit, integration, accessibility, performance, security, eval.
+These are read by the agent before writing tests. All P0 requirements
+must pass before a PR is opened.
 
 ---
 
-### Step 3 — Approve or reject
+### Gate G4 — reviewing evidence
 
-**To approve at Gate G4:**
+After the PR is merged:
 
-Create `.agent/gates/STORY-001-G4-approved.md`:
+    yooti qa:review STORY-001
 
-```markdown
-# Gate G4 — QA Sign-off
-Story: STORY-001
-Approved by: [your name]
-Date: [today]
-Evidence reviewed: test-results, coverage, mutation, security
-Notes: All gates pass. Mutation score 91%. Approved.
-```
+Expected output:
 
-**To reject at Gate G4:**
+    Hard gates (any failure = reject):
+    ✓ Unit tests 100% pass              46/46
+    ✓ Integration tests 100% pass       12/12
+    ✓ Zero regressions                  52 new tests added
+    ✓ Overall coverage >= 80%           99.7%
+    ✓ New code coverage >= 90%          100.0%
+    ✓ Zero CRITICAL security findings   Snyk: 0 critical
+    ✓ Zero HIGH security findings       Snyk: 0 high
+    ✓ Zero Semgrep findings             0
+    ✓ Zero accessibility violations     0
+    ✓ Code audit — 0 violations         All constitution checks passed
 
-Create `.agent/gates/STORY-001-G4-rejected.md` with specific reasons:
+    Soft gates:
+    ✓ Mutation score >= 85%             89.2%
 
-```markdown
-# Gate G4 — QA Rejected
-Story: STORY-001
-Date: [today]
-Reason: Mutation score 68%. The reset-password.service.ts has 12 surviving
-mutations in the expiry logic. The tests need additional cases covering:
-- Token expiry boundary (exactly at 24h)
-- Token already used (should not be reusable)
-Return to Phase 4 for test additions.
-```
-
-The story returns to Phase 4. The agent adds the missing tests,
-re-runs the full test suite, and produces a new evidence package.
+If all hard gates pass, you approve and the sprint moves forward.
 
 ---
 
-### Your ongoing responsibility: test strategy
+### Evidence package contents
 
-The agent follows your test strategy as defined in `.claude/agents/testgen.md`.
-If you see patterns in the agent's tests that are consistently weak —
-always missing boundary conditions, always using shallow mocks, never
-testing concurrent access — update the testgen prompt file. The agent
-will follow updated instructions from the next story onward.
+    .agent/evidence/STORY-001/
+      test-results.json
+      coverage-summary.json
+      regression-diff.json
+      security-scan.json
+      accessibility.json      (frontend only)
+      code-audit.md
+      pr-body.md
 
 ---
 
@@ -1086,371 +602,129 @@ will follow updated instructions from the next story onward.
 
 # MODULE 06 — DevOps and Release Manager
 
-## Environment ownership and production deployment
-
-**You own the infrastructure and Gate G5. 20 minutes to read.**
+## Environment setup and Gate G5
 
 ---
 
-### DevOps — your responsibilities
+### DevOps responsibilities
 
-You own the environment. The agent deploys to it — but you control
-what that environment looks like, what secrets are in it, and what
-health checks it must pass.
+Before Day 1:
+- Docker Desktop installed and running with at least 4GB memory
+- GitHub repository created, team has access
+- Add SNYK_TOKEN to GitHub Actions secrets (optional but recommended)
+- Ports free: 3000, 5173, 5432, 6379, 8000, 8001
 
-**Day 1 — environment setup:**
+After docker compose up, verify:
 
-```bash
-# Verify local stack starts
-docker compose up -d
-docker compose ps      # all services should show "running"
+    curl http://localhost:3000/health      # Node.js API
+    curl http://localhost:8000/health      # Python API
 
-# Verify environment variables are populated
-cat .env               # should have all values from .env.example
+During sprints, own ENV_ERROR escalations:
 
-# Verify pipeline scripts run
-bash pipeline/scripts/preflight.sh
-```
-
-**Your ongoing responsibilities:**
-
-```
-□ Keep infrastructure config in version control
-  (docker-compose.yml, Terraform, etc.)
-
-□ Own the secrets — never let application code handle secrets
-  Use AWS Secrets Manager, Vault, or GitHub Actions secrets
-
-□ Maintain staging environment parity with production
-  Same database version, same Redis version, same Python version
-
-□ Set up the nightly eval CI job
-  In .github/workflows/agent-evals.yml
-  Add ANTHROPIC_API_KEY as a GitHub Actions secret
-
-□ Monitor staging health after every deploy
-  The agent produces a health report — you receive it
-
-□ If the agent escalates an ENV_ERROR, you own the fix
-  These appear in .agent/escalations/ with ENV_ERROR type
-```
-
-**If a pre-flight check fails:**
-
-```bash
-yooti preflight
-# Read the specific failure message
-# Fix the environment issue
-# Run preflight again until all checks pass
-```
+    cat .agent/escalations/STORY-001-ENV_ERROR.md
+    # Fix the environment, delete the file, agent resumes
 
 ---
 
 ### Release Manager — Gate G5
 
-After QA signs off at Gate G4, the agent deploys to staging, runs
-smoke tests, and produces a staging health report. You review the
-report and decide whether to approve production deployment.
+After staging deploy and smoke tests:
 
-**What the staging health report contains:**
+    cat .agent/evidence/STORY-001/staging-health-report.md
+    # Verify staging is healthy before approving
 
-```
-Staging deploy: SUCCESS / FAILED
-Smoke tests:    X/X passing
-Health checks:
-  API /health       → 200 OK, response < 200ms
-  Database          → connected, migrations applied
-  Cache             → connected
-  Agent endpoint    → responding (if applicable)
-Performance:
-  P50 response time → Xms
-  P95 response time → Xms
-  Error rate        → X%
-```
+Create the G5 gate file:
 
-**To approve at Gate G5:**
+    # PowerShell
+    $content = "# Gate G5`nStory: STORY-001`nDecision: APPROVED`n..."
+    Set-Content ".agent/gates/STORY-001-G5-approved.md" $content
 
-```bash
-# Review the health report
-cat .agent/evidence/STORY-001/staging-health-report.md
+    # Mac / Linux
+    echo "# Gate G5
+    Story: STORY-001
+    Decision: APPROVED
+    Reviewed by: $(whoami)
+    Date: $(date -u +%Y-%m-%dT%H:%M:%SZ)" > .agent/gates/STORY-001-G5-approved.md
 
-# If satisfied, approve in GitHub
-# OR create the gate file
-echo "Approved for production — [your name] [date]" \
-  > .agent/gates/STORY-001-G5-approved.md
-```
-
-**Production deployment happens automatically after your approval.**
-
-The agent monitors production for 15 minutes after deployment. If any
-health check fails during this window, it automatically rolls back to
-the previous version and notifies you. You do not need to watch it —
-you will be notified if a rollback occurs.
+Do not approve G5 if staging health checks are failing.
 
 ---
 
 ---
 
-# MODULE 07 — Brownfield adoption
+# MODULE 07 — Tech Lead (Brownfield)
 
-## Adding Yooti to an existing codebase without breaking anything
-
-**For tech leads adopting on an existing project. 30 minutes.**
+## Adopting Yooti in an existing codebase
 
 ---
 
-### What brownfield means
+### What brownfield mode does
 
-Brownfield means you have an existing codebase. Tests may exist or not.
-Coverage may be good or bad. The agent's job in brownfield mode is
-surgical — it touches as little as possible, makes targeted changes,
-and never modifies tests that are currently passing.
+    yooti init . --context brownfield
 
-The risk in brownfield is regression — the agent changes something and
-breaks behaviour that was working before. The entire brownfield process
-is designed to prevent this.
+Adds only framework overlay files — .claude/, .agent/, pipeline/, docs/ —
+without touching your existing source code.
 
 ---
 
-### Step 1 — Initialise in brownfield mode
+### Step 1 — Document existing patterns
 
-From inside your existing project root:
-
-```bash
-yooti init . --context brownfield
-```
-
-The `--context brownfield` flag changes what the scaffold generates:
-
-```
-ADDITIONAL FILES IN BROWNFIELD
-────────────────────────────────────────────────────────────────────
-.agent/discovery/risk-surface.json     Simulated scan of your codebase
-.agent/snapshots/baseline.json         Template — you populate this
-.claude/rules/brownfield-rules.md      Surgical mode rules for the agent
-```
+The wizard asks about your existing stack, test runner, linter, and patterns.
+Be specific — the agent will follow what you document.
 
 ---
 
-### Step 2 — Capture the real baseline
+### Step 2 — Add custom constitutions
 
-The most important step in brownfield adoption. Run your existing tests
-and capture the results as the baseline:
+    cat > .claude/constitutions/your-framework.md << 'EOF'
+    # Your Framework Constitution
+    ## Patterns to follow
+    ...
+    EOF
 
-```bash
-# Run your existing test suite
-npm test > /tmp/test-results.txt 2>&1    # Node.js
-# or
-pytest --json-report > /tmp/test-results.txt 2>&1    # Python
+Add a reference in .claude/CLAUDE.md:
 
-# Capture the baseline
-yooti sprint:start
-```
-
-This baseline is sacred. Any test that is passing today must still be
-passing after every story the agent delivers. A regression against
-this baseline blocks the PR — automatically, without you having to
-check manually.
+    Your framework:   .claude/constitutions/your-framework.md
 
 ---
 
-### Step 3 — Understand the risk surface
+### Step 3 — Start at Stage 1 or 2
 
-Open `.agent/discovery/risk-surface.json`. This file identifies:
+    yooti configure --stage 2
 
-```json
-{
-  "high_risk_files": [
-    {
-      "file": "src/services/payment.service.ts",
-      "reason": "Low coverage (12%) with high dependency count (8 files import this)",
-      "recommendation": "Write characterisation tests before allowing agent to touch"
-    }
-  ],
-  "safe_to_modify": [
-    {
-      "file": "src/routes/health.ts",
-      "reason": "High coverage (94%), low dependencies"
-    }
-  ]
-}
-```
-
-High-risk files require characterisation tests before the agent can
-touch them. Do not skip this step — it is what prevents regressions.
-
----
-
-### Step 4 — Write characterisation tests for high-risk files
-
-A characterisation test captures what the code currently does —
-not what you wish it did. It documents existing behaviour so you
-know if the agent changes it.
-
-```typescript
-// Example characterisation test
-describe('PaymentService (characterisation)', () => {
-  it('returns the exact response format currently produced', async () => {
-    const result = await paymentService.process({ amount: 100 })
-    // Capture the exact current output — not what you think it should be
-    expect(result).toMatchSnapshot()
-  })
-
-  it('throws the exact error currently thrown on invalid input', async () => {
-    await expect(paymentService.process({ amount: -1 }))
-      .rejects.toThrow('Invalid amount')  // whatever it currently throws
-  })
-})
-```
-
-Run these tests to establish they pass. Then commit them. Now the agent
-is protected from accidentally changing this behaviour.
-
----
-
-### Step 5 — Start with low-risk stories
-
-For your first few brownfield stories, only assign work to files in the
-`safe_to_modify` list. This builds your team's confidence in the agent
-before it touches critical code.
-
-After 2–3 successful stories on safe files, start introducing stories
-that touch medium-risk files (coverage 40–70%). High-risk files (< 40%
-coverage) should have characterisation tests written before the agent
-touches them.
-
----
-
-### Brownfield rules the agent follows
-
-These are baked into `.claude/rules/brownfield-rules.md`:
-
-```
-RULE 1 — NEVER modify a test that is currently passing
-  The agent can ADD tests. It cannot change existing ones.
-
-RULE 2 — MINIMAL DIFF
-  Change only what is required for the acceptance criteria.
-  Do not refactor surrounding code unless it is in the plan.
-
-RULE 3 — MATCH EXISTING PATTERNS
-  If the codebase uses callbacks, do not introduce promises.
-  If the codebase uses snake_case, do not introduce camelCase.
-  Match the existing style, even if it is not ideal.
-
-RULE 4 — CHARACTERISATION TESTS FIRST
-  Before modifying any file with < 40% coverage, write
-  characterisation tests and get them passing. Then proceed.
-
-RULE 5 — ESCALATE ON TANGLED CODE
-  If implementing the acceptance criteria requires changing
-  more than the plan scope, escalate. Do not expand scope.
-```
+At Stage 2 the agent writes plans. Your team writes code from those plans.
+Build confidence before advancing to Stage 3.
 
 ---
 
 ---
 
-# MODULE 08 — Changing adoption stage
+# MODULE 08 — Advancing stages
 
-## Moving from where you started to where you want to be
+## Moving to the next adoption stage
 
-**For the whole team. Read together before advancing. 15 minutes.**
+Advance when your team has run at least 3 sprints at the current stage.
 
----
+    FROM STAGE 1 TO 2
+    □ Agent accurately parses all stories without ambiguity flags
+    □ Team is comfortable with the .plan.md format
+    □ CI is running clean
 
-### When to advance stages
+    FROM STAGE 2 TO 3
+    □ Team has reviewed 10+ plan files and quality is consistent
+    □ Developers can correct agent plans confidently
+    □ CI quality gates are all green
 
-Do not advance because you think you should. Advance when the evidence
-shows you are ready. Here is what ready looks like for each transition:
+    FROM STAGE 3 TO 4
+    □ Team has approved 20+ PRs and agent code quality is trusted
+    □ Staging deploy scripts are tested and reliable
+    □ Rollback procedure is documented
 
-```
-ADVANCING FROM STAGE 1 TO STAGE 2
-Ready when:
-□ The team has run 2+ sprints with the pipeline framework
-□ Everyone is comfortable with the .agent/ artifacts
-□ The PM is writing well-structured stories consistently
-□ The architect has a clear view of .plan.md format
-Not ready if:
-□ Pre-flight checks are failing regularly
-□ The PM is still writing ambiguous stories
-□ Gate G1 is being rubber-stamped rather than reviewed
+    FROM STAGE 4 TO 5
+    □ Staging deploy has succeeded 10+ times without intervention
+    □ Rollback has been tested deliberately at least once
 
-ADVANCING FROM STAGE 2 TO STAGE 3
-Ready when:
-□ The team has reviewed 5+ agent-generated .plan.md files
-□ The architect is comfortable approving plans at Gate G2
-□ The developer has reviewed agent-generated code in experiments
-□ The team has discussed and agreed on the PR review process
-Not ready if:
-□ Gate G2 is taking more than 45 minutes per story
-□ Plans are being rejected more than twice per story
-□ The team does not yet trust the quality gate thresholds
-
-ADVANCING FROM STAGE 3 TO STAGE 4
-Ready when:
-□ The team has merged 10+ agent PRs with zero production incidents
-□ Gate G3 reviews are taking < 30 minutes per story
-□ The developer is not regularly finding the same type of issue
-□ Staging deploys are consistently healthy
-Not ready if:
-□ The developer is still finding security issues in agent code
-□ Regression rate is > 0 per sprint
-□ Mutation scores are regularly below 85%
-
-ADVANCING FROM STAGE 4 TO STAGE 5
-Ready when:
-□ The team has run 3+ sprints at Stage 4 with no incidents
-□ Gate G5 approvals are taking < 5 minutes (health report is clean)
-□ Auto-rollbacks have happened 0 times or were handled automatically
-□ The team is genuinely constrained by gate time, not quality concerns
-Not ready if:
-□ Any gate is being skipped rather than properly reviewed
-□ The release manager does not feel confident in the health reports
-□ There are open security findings in any recent story
-```
-
----
-
-### How to change stage
-
-```bash
-# Interactive — wizard shows current stage and asks for new one
-yooti configure
-
-# Direct — change without wizard
-yooti configure --stage 4
-```
-
-When you run configure, it:
-1. Updates `yooti.config.json` with the new stage
-2. Shows a diff of which phases changed from human to agent
-3. Tells you to run `yooti upgrade --only-prompts` to regenerate `.claude/`
-
-```bash
-# Regenerate agent context for the new stage
-yooti upgrade --only-prompts
-```
-
-This updates `.claude/CLAUDE.md` with new handover point instructions
-for the agent. The agent reads its own config — after this command it
-knows exactly what changed.
-
----
-
-### Have a team conversation before advancing
-
-Changing stage affects every person on the team. Before running
-`yooti configure`, have a 15-minute team conversation covering:
-
-```
-□ What motivated this change? (Evidence, not impatience)
-□ Is everyone comfortable with what we are delegating to the agent?
-□ What is our rollback plan if we encounter issues?
-   (Answer: yooti configure --stage [previous stage])
-□ What will we watch closely in the first sprint at the new stage?
-□ When will we review whether the advance was the right call?
-```
+    yooti configure --stage 4     # advance when ready
 
 ---
 
@@ -1460,313 +734,132 @@ Changing stage affects every person on the team. Before running
 
 ## When something goes wrong
 
-**Anyone reads this. Use the index to find your issue.**
+---
+
+### 9.1 — Prerequisites not met
+
+    yooti doctor
+    # Shows exactly what is missing and how to install it
 
 ---
 
-### Index
+### 9.2 — Preflight failing
 
-```
-Issue                                           Section
-──────────────────────────────────────────────  ────────
-yooti command not found after install           9.1
-Command conflict with existing tool             9.2
-Docker services not starting                    9.3
-Pre-flight checks failing                       9.4
-Agent not generating code                       9.5
-Tests failing in baseline                       9.6
-Agent looping without converging                9.7
-PR body missing test results                    9.8
-Staging deploy failing                          9.9
-LangSmith traces not appearing                  9.10
-Story stuck in escalation                       9.11
-Regression introduced by agent                  9.12
-```
+    yooti preflight
 
----
+    # "Working tree is not clean"
+    git add . && git commit -m "chore: work in progress"
 
-### 9.1 — yooti command not found after install
+    # "yooti.config.json invalid"
+    cat yooti.config.json | python3 -m json.tool
 
-```bash
-# Check npm global bin is on your PATH
-npm bin -g
-# Copy the output path
-
-# Add to your shell config
-echo 'export PATH="$(npm bin -g):$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# Verify
-which yooti
-yooti --version
-```
-
----
-
-### 9.2 — Command conflict with existing tool
-
-If another tool named `yooti` exists on your PATH:
-
-```bash
-# Find what is conflicting
-which -a yooti
-
-# Check if the conflicting one is a Python package
-pip show yooti 2>/dev/null
-
-# If it is an old unused package, remove it
-pip uninstall yooti
-
-# If you need to keep it, rename it
-sudo mv $(which yooti) $(which yooti)-old
-
-# Reinstall the CLI
-npm link
-```
+    # "Pipeline scripts not found"
+    # Re-run yooti init to regenerate missing files
 
 ---
 
 ### 9.3 — Docker services not starting
 
-```bash
-# Check which service is failing
-docker compose ps
-docker compose logs [service-name]
+    docker compose ps
+    docker compose logs [service-name]
 
-# Common fixes:
-# Port already in use
-lsof -i :3000          # find what is using port 3000
-kill -9 [PID]          # kill it
+    # Port in use
+    lsof -i :3000 && kill -9 [PID]
 
-# Database volume corrupted
-docker compose down -v  # WARNING: deletes all data
-docker compose up -d
+    # Volume corrupted (deletes all data)
+    docker compose down -v && docker compose up -d
 
-# Not enough memory
-# Increase Docker Desktop memory to at least 4GB
-# Docker Desktop → Settings → Resources → Memory
-```
+    # Not enough memory
+    # Docker Desktop → Settings → Resources → Memory → 4GB minimum
 
 ---
 
-### 9.4 — Pre-flight checks failing
+### 9.4 — Agent writes code during Phase 2
 
-```bash
-yooti preflight
-# Read the specific failure for each check
+Phase 2 should produce only .plan.md files. If the agent writes code:
 
-# Common failures and fixes:
-#
-# "Git repository does not exist"
-git init
-
-# "Working tree is not clean"
-git status              # see what is uncommitted
-git add . && git commit -m "chore: initial setup"
-
-# "yooti.config.json is not valid JSON"
-cat yooti.config.json | python3 -m json.tool
-# The output will show the exact line with the syntax error
-
-# "Pipeline scripts not found"
-ls pipeline/scripts/    # check what is missing
-# Re-run: yooti init to regenerate missing files
-```
+Delete the code files, then tell the agent:
+"You wrote code during Phase 2. This is not allowed.
+Delete the code. Re-read CLAUDE.md Phase 2 section.
+Regenerate plans only for [STORY-ID]."
 
 ---
 
-### 9.5 — Agent not generating code
+### 9.5 — Agent creates one task per AC
 
-The agent generates code when it is in a project at Stage 3 or above
-AND there is a validated story in `.agent/requirements/`.
-
-Check:
-
-```bash
-# Check the stage
-cat yooti.config.json | grep stage
-
-# Check for validated stories
-ls .agent/requirements/
-
-# If no stories exist
-yooti story:add
-
-# If stage is 1 or 2
-yooti configure --stage 3
-```
+The most common decomposition error. Delete the wrong plans, then:
+"Plans for STORY-001 are wrong — each task covers one AC.
+Re-read decomposition rules in CLAUDE.md.
+Tasks split by layer: database, API, frontend.
+M-complexity = 2-3 tasks maximum. Regenerate."
 
 ---
 
-### 9.6 — Tests failing in baseline
+### 9.6 — Evidence package shows stale numbers
 
-If your baseline tests are failing before the agent has written anything:
+    # Tell the agent:
+    # "Coverage in .agent/evidence/STORY-001/ is stale.
+    #  Read current coverage from services/api_python/coverage.json
+    #  Update coverage-summary.json. Do not re-run tests."
 
-```bash
-# Run tests manually to see the failure
-npm test                           # Node.js
-pytest tests/ -m "not eval"        # Python
-
-# Read the failure output carefully
-# Common causes:
-# - Missing environment variable
-# - Database not seeded
-# - Service not running
-
-# Fix the environment, then retake the baseline
-yooti sprint:start
-```
+    yooti qa:review STORY-001   # re-run after agent updates evidence
 
 ---
 
-### 9.7 — Agent looping without converging
+### 9.7 — Coverage below 80% at G4
 
-If the agent reaches 5 iterations without getting to green:
+    cd services/api_python
+    pytest tests/unit/ --cov=src --cov-report=term-missing
+    # Missing column shows uncovered lines
 
-1. Check `.agent/escalations/` for an escalation file
-2. Read the escalation — it describes exactly which failure the agent
-   could not self-heal and why
-3. The developer reads the escalation and either:
-   - Fixes the specific issue themselves
-   - Feeds the agent a more specific correction prompt
-   - Returns the story to planning if the approach is wrong
+Add scaffold files to pyproject.toml omit list:
 
-The escalation file format:
+    [tool.coverage.report]
+    fail_under = 80
+    omit = ["tests/*", "src/__init__.py", "src/config.py",
+            "src/database.py", "alembic/*", "scripts/*"]
 
-```
-Story:          STORY-001
-Task:           T002
-Iterations:     5
-Final failure:  IMPORT_ERROR
-Detail:         Cannot resolve module '@company/shared-types'.
-                Package exists in package.json but is not in node_modules.
-                Likely cause: npm install has not been run after package.json
-                was updated in a recent commit.
-Recommended:    Run npm install and verify the import resolves.
-```
+Never omit business logic files — add tests instead.
 
 ---
 
-### 9.8 — PR body missing test results
+### 9.8 — Story stuck in escalation
 
-If the PR body does not include test results, the evidence package was
-not generated correctly:
+    ls .agent/escalations/
+    cat .agent/escalations/STORY-001-SCOPE_ERROR.md
 
-```bash
-ls .agent/evidence/STORY-001/
-# Check which files are present
+    SCOPE_ERROR       Developer + Architect decide
+    ENV_ERROR         DevOps fixes environment
+    AMBIGUITY         PM clarifies requirement
+    ARCH_ERROR        Architect reviews approach
+    INSTALL_REQUIRED  Run install command shown, delete file
 
-# If test-results.json is missing, the test run failed silently
-# Check the CI logs for the story
-```
-
----
-
-### 9.9 — Staging deploy failing
-
-```bash
-# Check the staging health report
-cat .agent/evidence/STORY-001/staging-health-report.md
-
-# Common causes:
-# Missing environment variable in staging
-# Database migration not applied
-# New dependency not installed in staging container
-
-# Fix the staging environment, then manually trigger redeploy
-# DO NOT approve Gate G5 until staging is healthy
-```
+After fixing, delete the file. Tell the agent: "Escalation resolved. Continue."
 
 ---
 
-### 9.10 — LangSmith traces not appearing
+### 9.9 — Regression introduced by agent
 
-```bash
-# Check environment variables
-grep LANGCHAIN .env
+    cat .agent/evidence/STORY-001/regression-diff.json
 
-# Should see:
-LANGCHAIN_TRACING_V2=true
-LANGCHAIN_API_KEY=your-key
-LANGCHAIN_PROJECT=your-project
-
-# Verify the key is valid
-curl -H "x-api-key: $LANGCHAIN_API_KEY" \
-  https://api.smith.langchain.com/api/v1/ping
-
-# Restart the agents container to pick up env changes
-docker compose restart agents
-```
-
----
-
-### 9.11 — Story stuck in escalation
-
-A story stuck in `.agent/escalations/` means the agent stopped and
-is waiting for a human input it cannot determine itself.
-
-```bash
-ls .agent/escalations/
-
-# Read the escalation file
-cat .agent/escalations/STORY-001-blocked.md
-
-# The file will say which type of escalation it is:
-# SCOPE_ERROR  → Developer and Architect decide scope change
-# ENV_ERROR    → DevOps fixes the environment
-# AMBIGUITY    → PM clarifies the requirement
-# ARCH_ERROR   → Architect reviews the approach
-```
-
-Each escalation type has a clear owner. Route it to the right person.
-When they resolve it, delete the escalation file and the agent resumes.
-
----
-
-### 9.12 — Regression introduced by agent
-
-If the regression diff shows newly failing tests:
-
-```bash
-cat .agent/evidence/STORY-001/regression-diff.json
-
-# This shows exactly which tests were passing before and are failing now
-# and which files were changed that might have caused the regression
-
-# Options:
-# 1. The agent caused the regression — return the story to Phase 4
-#    with a specific correction prompt explaining which tests regressed
-
-# 2. The regression existed before (flaky test) — document it
-#    cat "Known flaky: [test name] — [reason]" \
-#      >> .agent/known-flaky-tests.md
-#    Update the baseline to exclude the flaky test
-
-# 3. The regression reveals a bug in existing code — open a new story
-#    to fix the pre-existing bug separately
-```
+    # Agent caused it → return story to Phase 4 with specific correction
+    # Flaky test → document in .agent/known-flaky-tests.md
+    # Pre-existing bug → open new story to fix separately
 
 ---
 
 ### Getting help
 
-If your issue is not covered here:
-
-```
-1. Check .agent/escalations/ for any escalation files — they often
-   contain the specific error the agent encountered
-
-2. Check the CI logs in GitHub Actions for the specific job that failed
-
-3. Check docker compose logs [service] for service-level errors
-
-4. Open an issue at github.com/yooti/cli with:
-   - The output of: yooti preflight
-   - The output of: cat yooti.config.json
-   - The specific error message you are seeing
-   - Your Node.js, Docker, and Python versions
-```
+    1. Check .agent/escalations/ — specific error the agent encountered
+    2. Check GitHub Actions logs for the failing CI job
+    3. Run docker compose logs [service]
+    4. Run yooti doctor
+    5. Open an issue at github.com/yooti/cli with:
+       - Output of: yooti preflight
+       - Output of: cat yooti.config.json
+       - The specific error message
+       - Node.js, Docker, and Python versions
 
 ---
 
-*End of Getting Started Guide — Yooti v1.0*
+*Yooti v1.2 — Getting Started Guide*
