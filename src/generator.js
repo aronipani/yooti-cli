@@ -1019,6 +1019,84 @@ Test layers for any agent story:
 Never add a .claude/ folder inside agents/
 All Claude context lives here in the root .claude/ folder
 
+## How to decompose stories into tasks — Phase 2 rules
+
+A task is NOT one acceptance criterion.
+A task is one logical unit of work at one layer that can be
+built, committed, and tested independently.
+
+RULE 1 — Split by layer, not by AC
+  Database schema changes   → one task
+  API endpoint changes      → one task (depends on database task)
+  Frontend component        → one task (depends on API task)
+  Agent / LangGraph changes → one task (separate from API)
+  Email / async workers     → one task (separate from API)
+
+RULE 2 — Maximum files per task
+  A task should touch no more than 5-7 files.
+  If a task needs more files, split it into two tasks.
+
+RULE 3 — One task covers multiple AC
+  AC are requirements. Tasks are implementation units.
+  A single task typically covers 2-4 AC.
+  Never create one task per AC.
+
+RULE 4 — Dependency order is mandatory
+  Tasks run sequentially — T001 completes before T002 starts.
+  Always specify which task depends on which.
+  Database tasks always come before API tasks.
+  API tasks always come before frontend tasks.
+
+RULE 5 — Maximum tasks per story by complexity
+  XS story → 1 task
+  S story  → 1-2 tasks
+  M story  → 2-3 tasks
+  L story  → 3-4 tasks
+  XL story → 4-5 tasks
+  If you need more tasks than this, the story is too large.
+  Raise an escalation — do not create extra tasks autonomously.
+
+CORRECT decomposition example — User registration (M complexity)
+
+  T001 — Database schema and user model
+    Layer: database
+    Files: prisma/schema.prisma, src/models/user.ts
+    AC covered: AC-1 (foundation for account creation)
+    Depends on: none
+
+  T002 — Registration API endpoint with rate limiting
+    Layer: api
+    Files: src/routes/auth/register.ts,
+           src/services/auth.service.ts,
+           src/middleware/rate-limit.ts
+    AC covered: AC-1, AC-2, AC-3, AC-4, AC-6
+    Depends on: T001
+
+  T003 — Welcome email service
+    Layer: api (async worker)
+    Files: src/services/email.service.ts
+    AC covered: AC-5
+    Depends on: T002
+
+  T004 — Registration frontend form
+    Layer: frontend
+    Files: src/pages/Register.tsx,
+           src/components/RegisterForm.tsx
+    AC covered: AC-1, AC-3, AC-4
+    Depends on: T002
+
+WRONG decomposition example — do not do this
+
+  T001 — AC-1 account creation     ✗ one AC per task
+  T002 — AC-2 duplicate email      ✗ one AC per task
+  T003 — AC-3 password validation  ✗ one AC per task
+  T004 — AC-4 email validation     ✗ one AC per task
+  T005 — AC-5 welcome email        ✗ one AC per task
+  T006 — AC-6 rate limiting        ✗ one AC per task
+
+If you find yourself creating one task per AC you are doing
+it wrong. Stop, re-read these rules, and start over.
+
 ## Agent read order — execute before every task
 
 1. Read .agent/requirements/[STORY-ID]-validated.json       — the spec
@@ -1959,6 +2037,9 @@ Blocks: T002
 <!-- Format: [ROLE GATE timestamp]: note text -->
 `);
 
+  write('.agent/examples/good-decomposition.md', goodDecompositionExample(config));
+  write('.agent/examples/bad-decomposition.md', badDecompositionExample(config));
+
   // ── Constitutions ──
   write('.claude/constitutions/security.md', securityConstitution(config));
   write('.claude/constitutions/testing.md', testingConstitution(config));
@@ -2320,6 +2401,36 @@ FAIL: sprint does not start
 - [ ] .plan files reviewed for M/L stories
 - [ ] No breaking cross-system changes without approval
 FAIL: code generation does not begin
+
+### Plan quality checklist — architect reviews each plan against this
+
+DECOMPOSITION
+- [ ] Tasks split by layer — not by acceptance criterion
+- [ ] No more tasks than the complexity allows
+  (XS=1, S=1-2, M=2-3, L=3-4, XL=4-5)
+- [ ] Each task touches no more than 5-7 files
+- [ ] Every AC from the story is covered by at least one task
+- [ ] No AC is left without a task covering it
+
+SCOPE
+- [ ] Every file in CREATE/MODIFY scope is necessary for this task
+- [ ] OUT OF SCOPE section lists unrelated directories
+- [ ] No file appears in two tasks (no overlap between tasks)
+- [ ] Scope does not bleed into unrelated services
+
+DEPENDENCIES
+- [ ] Tasks are ordered correctly — database before API before frontend
+- [ ] Dependency chain has no circular references
+- [ ] Tasks that can run in parallel are identified
+
+IMPLEMENTATION STEPS
+- [ ] Steps are actionable and specific
+- [ ] Steps follow the correct order
+- [ ] Steps reference the right files from scope
+- [ ] No step touches a file outside the scope
+
+APPROVE when all boxes above are checked.
+REJECT with specific feedback on which box failed and why.
 
 ## G3 Developer PR Review (Days 6-8)
 - [ ] Code matches intent
@@ -3075,4 +3186,127 @@ function nodeApiPackageJson(config) {
       }),
     },
   }, null, 2);
+}
+
+// ── Decomposition examples ──
+
+function goodDecompositionExample(config) {
+  return `# Good task decomposition — reference example
+
+## Story
+STORY-003 — As a new visitor I want to create an account
+Complexity: M
+Affected layers: database, api, frontend
+
+## Correct decomposition — 4 tasks for M complexity
+
+STORY-003-T001 — Database schema and user model
+  Layer:      database
+  Status:     PENDING
+  Files:
+    CREATE: prisma/schema.prisma (users table)
+    CREATE: src/models/user.ts
+    OUT OF SCOPE: src/routes/, frontend/
+  AC covered: AC-1 (foundation)
+  Depends on: none
+  Steps:
+    1. Add users table to prisma schema
+    2. Define User TypeScript model
+    3. Write migration
+    4. Write unit tests for model
+
+STORY-003-T002 — Registration API endpoint
+  Layer:      api
+  Status:     PENDING
+  Files:
+    CREATE: src/routes/auth/register.ts
+    CREATE: src/services/auth.service.ts
+    MODIFY: src/middleware/rate-limit.ts
+    OUT OF SCOPE: frontend/, prisma/
+  AC covered: AC-1, AC-2, AC-3, AC-4, AC-6
+  Depends on: T001
+  Steps:
+    1. Create registration route handler
+    2. Add password hashing in auth service
+    3. Add rate limiting middleware
+    4. Write integration tests for all AC
+
+STORY-003-T003 — Welcome email service
+  Layer:      api (async)
+  Status:     PENDING
+  Files:
+    CREATE: src/services/email.service.ts
+    OUT OF SCOPE: frontend/, prisma/, src/routes/
+  AC covered: AC-5
+  Depends on: T002
+  Steps:
+    1. Create email service with SendGrid
+    2. Add welcome email template
+    3. Wire to registration completion event
+    4. Write integration test with mocked email
+
+STORY-003-T004 — Registration frontend form
+  Layer:      frontend
+  Status:     PENDING
+  Files:
+    CREATE: src/pages/Register.tsx
+    CREATE: src/components/RegisterForm.tsx
+    OUT OF SCOPE: services/api/, prisma/
+  AC covered: AC-1, AC-3, AC-4
+  Depends on: T002
+  Steps:
+    1. Create RegisterForm component with validation
+    2. Wire to POST /api/v1/auth/register
+    3. Handle all error states from API
+    4. Write component tests including axe accessibility
+
+## Why this decomposition is correct
+  - 4 tasks for M complexity — within the M limit of 2-3 is tight
+    but acceptable because there are 4 distinct layers
+  - Each task is at one layer only
+  - Each task has clear dependencies
+  - AC are distributed across tasks by which layer implements them
+  - No task has more than 4 files
+`;
+}
+
+function badDecompositionExample(config) {
+  return `# Bad task decomposition — what NOT to do
+
+## Story
+STORY-003 — As a new visitor I want to create an account
+Complexity: M
+
+## Wrong decomposition — one task per AC
+
+STORY-003-T001 — Implement AC-1 account creation     ✗
+STORY-003-T002 — Implement AC-2 duplicate email      ✗
+STORY-003-T003 — Implement AC-3 password validation  ✗
+STORY-003-T004 — Implement AC-4 email validation     ✗
+STORY-003-T005 — Implement AC-5 welcome email        ✗
+STORY-003-T006 — Implement AC-6 rate limiting        ✗
+
+## Why this is wrong
+
+  1. AC-1, AC-2, AC-3, AC-4, AC-6 are all implemented in the same
+     API endpoint file. Splitting them into separate tasks means
+     the agent will create the same file 5 times or create
+     conflicts between tasks.
+
+  2. There are 6 tasks for an M complexity story.
+     M allows 2-3 tasks maximum.
+
+  3. Tasks do not have a meaningful dependency order.
+     AC-3 and AC-4 are both frontend validation —
+     they belong in the same task.
+
+  4. The agent will not know which task owns which file,
+     leading to scope conflicts and duplicate code.
+
+## Rule to remember
+
+  If your tasks look like a numbered list of your AC
+  you have decomposed by AC not by layer.
+  Start over. Group by layer instead.
+`;
 }
