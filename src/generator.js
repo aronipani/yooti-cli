@@ -960,6 +960,44 @@ export async function generateFiles(config) {
   const lintCmd = config.linter === 'biome' ? 'biome check src/' : 'eslint src/ --max-warnings 0';
 
   // ── .claude/CLAUDE.md ──
+  const isAgent = config.projectType === 'agent' || config.projectType === 'full';
+  const hasNode = config.stack.includes('node');
+  const hasReact = config.stack.includes('react') || config.stack.includes('nextjs');
+  const hasPython = config.stack.includes('python') || isAgent;
+
+  const stageName = (stage) => {
+    const names = {
+      1: 'Foundation — agent parses requirements only',
+      2: 'Build — agent generates plans and requirements',
+      3: 'Review — agent writes code and tests. Team reviews PR and controls all deploys.',
+      4: 'Deploy — agent writes code and deploys to staging. Team controls production.',
+      5: 'Autonomous — agent runs the full pipeline. Team controls 5 gates only.'
+    };
+    return names[stage] || names[3];
+  };
+
+  const stageAgentDoes = (stage) => {
+    const actions = {
+      1: '- Parse stories only\n- Does not write plans or code',
+      2: '- Parse stories\n- Write .plan files\n- Does not write code',
+      3: '- Parse stories, write .plan files\n- Generate implementation code (full generation loop)\n- Write tests TDD-first\n- Generate PR body and evidence package\n- STOP at PR — human reviews, edits, approves or rejects\n- STOP at deploy — human controls all deployments',
+      4: '- Full pipeline through staging deploy\n- STOP at production — human controls production only',
+      5: '- Full pipeline end to end\n- STOP at 5 human gates only'
+    };
+    return actions[stage] || actions[3];
+  };
+
+  const stageHumanDoes = (stage) => {
+    const actions = {
+      1: '- Everything except story parsing',
+      2: '- Review plans\n- Write all code\n- All deployments',
+      3: '- Review and sign off requirements (Gate G1)\n- Review architecture and .plan files (Gate G2)\n- Review PR — audit code, make edits directly in the branch, approve or reject (Gate G3)\n- Control ALL deployments — staging and production',
+      4: '- Gate G1, G2, G3, G4\n- Production deployments only',
+      5: '- Gate G1, G2, G3, G4, G5 only'
+    };
+    return actions[stage] || actions[3];
+  };
+
   write('.claude/CLAUDE.md', `# CLAUDE — Autonomous SDLC Agent Context
 # Project: ${config.projectName}
 # Context: ${config.context.toUpperCase()} · Stack: ${config.stack.join(' + ')}
@@ -973,203 +1011,34 @@ You do not make decisions that belong to humans.
 You do not merge PRs, deploy to production, or skip gates.
 
 ## Toolchain — run in this exact order every iteration
-
+${hasNode ? `
 ### Node.js API (services/api/)
   Step 1 Lint:   ${lintCmd}
   Step 2 Types:  npx tsc --noEmit --strict
   Step 3 Tests:  npx vitest run tests/unit/ --coverage
   Step 4 Green:  commit
-
+` : ''}${hasReact ? `
 ### React Frontend (frontend/dashboard/)
   Step 1 Lint:       ${lintCmd}
   Step 2 Types:      npx tsc --noEmit
   Step 3 Tests:      npx vitest run --coverage  (axe-core runs inside)
   Step 4 Playwright: npx playwright test
   Step 5 Green:      commit
+` : ''}${hasPython ? `
+### Python API / Agents (services/api_python/ or agents/)
+  Step 1 Lint:   ruff check src/ && ruff format --check src/
+  Step 2 Types:  mypy src/ --strict
+  Step 3 Tests:  pytest tests/unit/ --cov=src
+  Step 4 Green:  commit
 
 ### Python Batch (batch/analytics/)
   Step 1 Lint:   ruff check src/ && ruff format --check src/
   Step 2 Types:  mypy src/ --strict
   Step 3 Tests:  pytest tests/unit/ --cov=src
   Step 4 Green:  commit
-
+` : ''}
 RULE: If ANY step fails → diagnose → fix → restart from Step 1. Never skip steps.
-
-## Phase 4 — code generation rules
-
-STEP 1 — Write failing tests first (TDD mandatory)
-  Write the test before the implementation.
-  The test must fail before you write any implementation code.
-  This is not optional. Every task starts with failing tests.
-
-STEP 2 — Write minimum implementation to pass tests
-  Write only what is needed to make the tests pass.
-  Do not add functionality not covered by a test.
-  Do not touch files outside your plan scope.
-
-STEP 3 — Run the quality loop
-  Python layer:
-    ruff check . && ruff format --check .
-    mypy . --strict
-    pytest -m "not eval and not integration" --cov
-  TypeScript/Node layer:
-    ${lintCmd}
-    tsc --noEmit
-    vitest --coverage
-  React layer:
-    ${lintCmd}
-    tsc --noEmit
-    vitest --coverage
-
-STEP 4 — Self-heal failures
-  If lint fails: fix the lint error. Re-run from Step 3.
-  If type check fails: fix the type error. Re-run from Step 3.
-  If tests fail: diagnose the failure. Fix it. Re-run from Step 3.
-  Maximum 5 iterations per task.
-  If not green after 5 iterations: write escalation. Stop.
-
-STEP 5 — Mark task complete
-  Update Status in the .plan.md file from PENDING to COMPLETE.
-  Move to the next task in dependency order.
-
-STEP 6 — Stop at Gate G3
-  After all tasks for a story are COMPLETE:
-  Open a PR with a body showing test results, coverage,
-  AC coverage table, and any deliberate decisions made.
-  Do NOT merge the PR. Gate G3 belongs to the developer.
-
-## Phase 5 — mandatory before any PR is opened
-
-Never open a PR before .agent/evidence/[STORY-ID]/ exists.
-A PR without an evidence package is invalid.
-The PR body must be generated FROM the evidence package.
-
-Before opening a PR for any story run these steps in order:
-
-STEP 1 — Run the full test suite
-  Python:
-    pytest -m "not eval" --cov --cov-report=json -q
-  Node.js API:
-    cd services/api && npx vitest run --coverage --reporter=json
-  React frontend:
-    cd frontend/dashboard && npx vitest run --coverage --reporter=json
-
-STEP 2 — Create the evidence folder
-  mkdir -p .agent/evidence/[STORY-ID]
-
-STEP 3 — Write test-results.json
-  {
-    "story_id": "[STORY-ID]",
-    "generated_at": "[ISO timestamp]",
-    "unit": {
-      "total": N,
-      "passed": N,
-      "failed": 0
-    },
-    "integration": {
-      "total": N,
-      "passed": N,
-      "failed": 0
-    }
-  }
-  If any failed > 0: do NOT open a PR. Fix failures first.
-
-STEP 4 — Write coverage-summary.json
-  {
-    "story_id": "[STORY-ID]",
-    "generated_at": "[ISO timestamp]",
-    "overall": N.N,
-    "new_code": N.N,
-    "files": [
-      { "file": "path/to/file.py", "lines": N.N, "branches": N.N }
-    ]
-  }
-  If overall < 80 or new_code < 90: do NOT open a PR. Fix coverage first.
-
-STEP 5 — Write regression-diff.json
-  Run: python tests/regression/comparator/diff.py
-  Write:
-  {
-    "story_id": "[STORY-ID]",
-    "generated_at": "[ISO timestamp]",
-    "baseline_sprint": "sprint-N",
-    "newly_failing": [],
-    "newly_passing": [],
-    "total_tests_before": N,
-    "total_tests_after": N
-  }
-  If newly_failing has any entries: do NOT open a PR. Fix regressions first.
-
-STEP 6 — Write security-scan.json
-  Run snyk and semgrep if available.
-  Write:
-  {
-    "story_id": "[STORY-ID]",
-    "generated_at": "[ISO timestamp]",
-    "snyk": { "critical": 0, "high": 0, "medium": 0, "low": 0 },
-    "semgrep": { "findings": 0 },
-    "scanned_at": "[ISO timestamp]"
-  }
-  If snyk.critical > 0 or snyk.high > 0: do NOT open a PR. Fix first.
-  If semgrep.findings > 0: do NOT open a PR. Fix first.
-  If snyk or semgrep are not installed: write the file with a note
-  and continue — do not block the PR for missing tools.
-
-STEP 7 — Write accessibility.json (frontend stories only)
-  Only write this file if the story touches the frontend layer.
-  {
-    "story_id": "[STORY-ID]",
-    "generated_at": "[ISO timestamp]",
-    "violations": 0,
-    "passes": N,
-    "viewports_tested": [375, 768, 1280]
-  }
-
-STEP 8 — Write pr-body.md
-  Generate from all evidence files above.
-  Format:
-
-  ## [STORY-ID] — [story title]
-
-  ### Acceptance criteria coverage
-  | AC | Status | Test |
-  |----|--------|------|
-  | AC-1 | PASS | test_name |
-
-  ### Test results
-  Unit: N/N passing
-  Integration: N/N passing
-  Regression: 0 newly failing
-
-  ### Coverage
-  Overall: N.N%
-  New code: N.N%
-
-  ### Security
-  Snyk: 0 critical, 0 high
-  Semgrep: 0 findings
-
-  ### Deliberate decisions
-  List any non-obvious choices made during implementation.
-
-  ### Files changed
-  List every file created or modified with line counts.
-
-STEP 9 — Open the PR
-  Only open the PR after all evidence files are written.
-  PR title: [STORY-ID] — [story title]
-  PR body: content of .agent/evidence/[STORY-ID]/pr-body.md
-  Branch: feature/[STORY-ID]
-  Do NOT merge. Stop here. Gate G3 belongs to the developer.
-
-EVIDENCE PACKAGE CHECKLIST — all must exist before PR opens:
-  .agent/evidence/[STORY-ID]/test-results.json      required
-  .agent/evidence/[STORY-ID]/coverage-summary.json  required
-  .agent/evidence/[STORY-ID]/regression-diff.json   required
-  .agent/evidence/[STORY-ID]/security-scan.json     required
-  .agent/evidence/[STORY-ID]/accessibility.json     frontend only
-  .agent/evidence/[STORY-ID]/pr-body.md             required
-
+${isAgent ? `
 ## Working in the agents/ layer
 
 When generating or modifying any file inside agents/:
@@ -1194,7 +1063,7 @@ Test layers for any agent story:
 
 Never add a .claude/ folder inside agents/
 All Claude context lives here in the root .claude/ folder
-
+` : ''}
 ## How to decompose stories into tasks — Phase 2 rules
 
 A task is NOT one acceptance criterion.
@@ -1229,34 +1098,34 @@ RULE 5 — Maximum tasks per story by complexity
   M story  → 2-3 tasks
   L story  → 3-4 tasks
   XL story → 4-5 tasks
-  If you need more tasks than this, the story is too large.
+  If you need more tasks than this the story is too large.
   Raise an escalation — do not create extra tasks autonomously.
 
 CORRECT decomposition example — User registration (M complexity)
 
   T001 — Database schema and user model
     Layer: database
-    Files: prisma/schema.prisma, src/models/user.ts
+    Files: src/models/user.py (or user.ts)
     AC covered: AC-1 (foundation for account creation)
     Depends on: none
 
   T002 — Registration API endpoint with rate limiting
     Layer: api
-    Files: src/routes/auth/register.ts,
-           src/services/auth.service.ts,
-           src/middleware/rate-limit.ts
+    Files: src/routes/auth/register.py,
+           src/services/auth_service.py,
+           src/middleware/rate_limit.py
     AC covered: AC-1, AC-2, AC-3, AC-4, AC-6
     Depends on: T001
 
   T003 — Welcome email service
     Layer: api (async worker)
-    Files: src/services/email.service.ts
+    Files: src/services/email_service.py
     AC covered: AC-5
     Depends on: T002
 
   T004 — Registration frontend form
     Layer: frontend
-    Files: src/pages/Register.tsx,
+    Files: src/pages/RegisterPage.tsx,
            src/components/RegisterForm.tsx
     AC covered: AC-1, AC-3, AC-4
     Depends on: T002
@@ -1266,9 +1135,6 @@ WRONG decomposition example — do not do this
   T001 — AC-1 account creation     ✗ one AC per task
   T002 — AC-2 duplicate email      ✗ one AC per task
   T003 — AC-3 password validation  ✗ one AC per task
-  T004 — AC-4 email validation     ✗ one AC per task
-  T005 — AC-5 welcome email        ✗ one AC per task
-  T006 — AC-6 rate limiting        ✗ one AC per task
 
 If you find yourself creating one task per AC you are doing
 it wrong. Stop, re-read these rules, and start over.
@@ -1314,6 +1180,43 @@ It does not require human input.
 If preflight fails: write escalation and stop.
 If G2 gate is missing: write escalation and stop.
 
+## Phase 4 — code generation rules
+
+STEP 1 — Write failing tests first (TDD mandatory)
+  Write the test before the implementation.
+  The test must fail before you write any implementation code.
+  This is not optional. Every task starts with failing tests.
+
+STEP 2 — Write minimum implementation to pass tests
+  Write only what is needed to make the tests pass.
+  Do not add functionality not covered by a test.
+  Do not touch files outside your plan scope.
+
+STEP 3 — Run the quality loop
+  Python layer:
+    ruff check . && ruff format --check .
+    mypy . --strict
+    pytest -m "not eval and not integration" --cov
+  TypeScript/Node layer:
+    ${lintCmd}
+    tsc --noEmit
+    vitest --coverage
+  React layer:
+    ${lintCmd}
+    tsc --noEmit
+    vitest --coverage
+
+STEP 4 — Self-heal failures
+  If lint fails: fix the lint error. Re-run from Step 3.
+  If type check fails: fix the type error. Re-run from Step 3.
+  If tests fail: diagnose the failure. Fix it. Re-run from Step 3.
+  Maximum 5 iterations per task.
+  If not green after 5 iterations: write escalation. Stop.
+
+STEP 5 — Mark task complete
+  Update Status in the .plan.md file from PENDING to COMPLETE.
+  Move to the next task in dependency order.
+
 ## Phase 5 — test orchestration and evidence package
 
 Phase 5 runs after all tasks in a story are COMPLETE.
@@ -1326,87 +1229,64 @@ Steps in order:
   3. Run regression diff: python tests/regression/comparator/diff.py
   4. Run security scan if available (snyk, semgrep)
   5. Create .agent/evidence/[STORY-ID]/ folder
-  6. Write evidence files:
+  6. Write these evidence files:
 
      test-results.json
-     {
-       "story_id": "[STORY-ID]",
-       "generated_at": "[ISO timestamp]",
+     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
        "unit": { "total": N, "passed": N, "failed": 0 },
-       "integration": { "total": N, "passed": N, "failed": 0 }
-     }
+       "integration": { "total": N, "passed": N, "failed": 0 } }
 
      coverage-summary.json
-     {
-       "story_id": "[STORY-ID]",
-       "generated_at": "[ISO timestamp]",
-       "overall": N.N,
-       "new_code": N.N,
-       "files": []
-     }
+     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+       "overall": N.N, "new_code": N.N, "files": [] }
 
      regression-diff.json
-     {
-       "story_id": "[STORY-ID]",
-       "generated_at": "[ISO timestamp]",
-       "baseline_sprint": "sprint-N",
-       "newly_failing": [],
-       "newly_passing": [],
-       "total_tests_before": N,
-       "total_tests_after": N
-     }
+     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+       "baseline_sprint": "sprint-N", "newly_failing": [],
+       "newly_passing": [], "total_tests_before": N, "total_tests_after": N }
 
      security-scan.json
-     {
-       "story_id": "[STORY-ID]",
-       "generated_at": "[ISO timestamp]",
+     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
        "snyk": { "critical": 0, "high": 0, "medium": 0 },
-       "semgrep": { "findings": 0 }
-     }
+       "semgrep": { "findings": 0 } }
+
+     accessibility.json (frontend stories only)
+     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+       "violations": 0, "passes": N, "viewports_tested": [375, 768, 1280] }
 
      pr-body.md
      ## [STORY-ID] — [story title]
-
      ### Acceptance criteria coverage
      | AC | Status | Test |
      |----|--------|------|
-     | AC-1 | PASS | test name |
-
+     | AC-1 | PASS | test_name |
      ### Test results
-     Unit: N/N passing
-     Integration: N/N passing
-     Regression: 0 newly failing
-
+     Unit: N/N passing · Integration: N/N passing · Regression: 0 newly failing
      ### Coverage
-     Overall: N.N%
-     New code: N.N%
-
+     Overall: N.N% · New code: N.N%
      ### Security
-     Snyk: 0 critical, 0 high
-     Semgrep: 0 findings
-
+     Snyk: 0 critical, 0 high · Semgrep: 0 findings
      ### Files changed
      List every file created or modified with line counts.
-
      ### Deliberate decisions
      List any non-obvious choices made.
 
-  7. Hard blocks — do NOT open PR if any of these are true:
+  7. Hard blocks — do NOT open PR if any are true:
      test-results.json shows failed > 0
      coverage-summary.json shows overall < 80
      coverage-summary.json shows new_code < 90
      regression-diff.json shows newly_failing is not empty
      security-scan.json shows snyk.critical > 0 or snyk.high > 0
 
-  8. Open the PR only after all evidence files exist and
-     all hard blocks are clear
+  8. Open the PR only after all evidence files exist
+     and all hard blocks are clear
 
 ## Gate G3 — PR review
 
 Gate G3 happens entirely in GitHub.
 The developer reviews, approves, and merges the PR in GitHub.
 No CLI command is required at Gate G3.
-After the PR is merged, QA proceeds with: yooti qa:review [STORY-ID]
+After the PR is merged QA proceeds with: yooti qa:review [STORY-ID]
 
 Do NOT wait for a CLI command at Gate G3.
 Do NOT re-open the PR after it is merged.
@@ -1477,9 +1357,7 @@ When in doubt: escalate and stop.
 
 ## Audit logging — required for every action
 
-You must log every significant action to .agent/logs/[STORY-ID].log.json.
-Use the appendEvent function from src/audit/logger.js.
-Do not skip logging — the audit trail is a compliance requirement.
+Log every significant action to .agent/logs/[STORY-ID].log.json.
 
 Log these events:
 - Every phase transition              → PHASE_START
@@ -1494,13 +1372,15 @@ Human actions (gates, corrections, annotations) are logged by
 the human via CLI commands — you do not log those.
 
 ## Constitutions — read before writing any code
+${hasPython ? `
+Python code (any layer):      .claude/constitutions/python.md` : ''}
+${isAgent ? `
+LangGraph agents:             .claude/constitutions/langgraph.md` : ''}
+${hasReact ? `
+React components:             .claude/constitutions/react.md` : ''}
+${config.hasPostgres ? `
+Database queries or schemas:  .claude/constitutions/postgresql.md` : ''}
 
-${config.stack.includes('python') ? 'Python code (any layer):      .claude/constitutions/python.md' : ''}
-${config.projectType === 'full' || config.projectType === 'agent' ? 'LangGraph agents:             .claude/constitutions/langgraph.md' : ''}
-${config.stack.includes('node') ? 'TypeScript code (any layer):  .claude/constitutions/typescript.md' : ''}
-${config.stack.includes('react') || config.stack.includes('nextjs') ? 'React components:             .claude/constitutions/react.md' : ''}
-${config.hasPostgres ? 'Database queries or schemas:  .claude/constitutions/postgresql.md' : ''}
-${config.hasMongo ? 'MongoDB queries or schemas:   .claude/constitutions/mongodb.md' : ''}
 Any code in any layer:        .claude/constitutions/security.md
 Any test in any layer:        .claude/constitutions/testing.md
 
@@ -1509,9 +1389,7 @@ Constitutions are law — not suggestions.
 
 ## Story type templates
 
-When creating a new story, use the appropriate template from .agent/templates/.
-Each template defines the required fields, acceptance criteria structure,
-definition of done, and which constitutions apply.
+When creating a new story use the appropriate template from .agent/templates/.
 
 Available templates:
 - .agent/templates/feature-story.json      — new features
@@ -1519,32 +1397,33 @@ Available templates:
 - .agent/templates/refactor-story.json     — refactors (no behaviour change)
 - .agent/templates/security-patch.json     — security vulnerabilities (P0)
 - .agent/templates/api-contract.json       — API endpoints (contract tests)
-${config.projectType === 'full' || config.projectType === 'agent' ? '- .agent/templates/agent-story.json       — LangGraph agents (3-layer testing)' : ''}
+${isAgent ? '- .agent/templates/agent-story.json       — LangGraph agents (3-layer testing)' : ''}
 
 ## Unit testing — mandatory on every story
 
 Write tests BEFORE implementation (TDD).
 Iteration 1 always starts with failing tests.
-
+${hasNode ? `
 Node.js API:
   Run:      cd services/api && npm run test:coverage
   Location: tests/unit/*.test.ts
   Helpers:  import { createUser } from '../helpers/factories'
             import { mockLogger, mockDatabase } from '../helpers/mocks'
   Config:   vitest.config.ts — coverage thresholds enforced
-
+` : ''}${hasReact ? `
 React frontend:
   Run:      cd frontend/dashboard && npm run test:coverage
   Location: tests/unit/*.test.tsx
   Helpers:  import { renderWithProviders } from '../helpers/render'
   Required: axe accessibility test in EVERY component test
-
+` : ''}${hasPython ? `
 Python agents/batch:
   Run:      pytest -m "not eval and not integration" --cov
   Location: tests/unit/test_*.py
   Helpers:  from tests.helpers.factories import create_user
   Config:   pyproject.toml — fail_under = 80 enforced
   Note:     pytest --eval runs eval tests (nightly only, costs money)
+` : ''}
 
 ## When you add a new dependency
 
@@ -1563,7 +1442,6 @@ Content:
 
 Do not proceed with code generation until the install
 escalation is acknowledged by the developer.
-The package will not be importable until it is installed.
 
 ## Absolute rules
 1. SCOPE — only modify files listed in your .plan.md "Files in Scope"
@@ -1574,13 +1452,9 @@ The package will not be importable until it is installed.
 6. ESCALATE — write to .agent/escalations/ on: SCOPE_ERROR, ENV_ERROR, SPEC_AMBIGUITY, >5 iterations
 
 ## Context: ${config.context.toUpperCase()}
-${config.context === 'brownfield'
-  ? `- Read .agent/discovery/risk-surface.json before touching any file
-- Read .claude/rules/brownfield-rules.md before generating code
-- Characterization tests REQUIRED before modifying files with coverage < 40%
-- Match existing code style exactly. Minimize diff. No opportunistic refactoring.`
-  : `- Read .claude/rules/greenfield-rules.md for the Pattern Mandate
-- You are establishing the patterns — consistency > cleverness`}
+${config.context === 'greenfield'
+  ? '- Read .claude/rules/greenfield-rules.md for the Pattern Mandate\n- You are establishing the patterns — consistency > cleverness'
+  : '- Read .claude/rules/brownfield-rules.md for adoption rules\n- Match existing patterns — never introduce new ones without architect approval'}
 
 ## Quality thresholds — hard requirements
 
@@ -1603,16 +1477,18 @@ Security findings:   0 HIGH/CRITICAL (blocks PR)
 | Accessibility | 0 violations | YES |
 | Lighthouse perf | >= 80 | YES |
 
-## Pipeline stage: ${config.stage} — ${stageDescription(config.stage)}
+## Pipeline stage: ${config.stage} — ${stageName(config.stage)}
 
 ### What the agent does at this stage
-${stageAgentInstructions(config.stage)}
+${stageAgentDoes(config.stage)}
 
 ### What the human does at this stage
-${stageHumanInstructions(config.stage)}
+${stageHumanDoes(config.stage)}
 
 ### Handover points — STOP and wait for human at these points
-${stageHandoverPoints(config.stage)}
+STOP after: PR body and evidence package generated
+Human takes over: PR review (read, edit, approve/reject), ALL deployments
+KEY POINT: Human may edit code directly in the feature branch before approving
 `);
 
   // ── .claude/agents/ ──
@@ -2413,7 +2289,6 @@ Blocks: T002
     write('frontend/dashboard/.dockerignore', nodeDockerignore());
   }
 
-  const hasPython = config.stack.includes('python') || config.projectType === 'agent' || config.projectType === 'full';
   if (hasPython) {
     const pyRoot = config.projectType === 'agent' || config.projectType === 'full'
       ? 'agents' : 'batch/analytics';
