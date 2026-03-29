@@ -1,6 +1,7 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs'
+import { evidencePackageComplete } from './sprint.js'
 
 export async function qaPlan(storyId) {
   if (!storyId) {
@@ -170,13 +171,17 @@ export async function qaReview(storyId) {
     storyId = ans.storyId
   }
 
-  const evidenceDir = `.agent/evidence/${storyId}`
-  if (!existsSync(evidenceDir)) {
-    console.log(chalk.red(`\n  ✗ No evidence package found for ${storyId}`))
-    console.log(chalk.dim(`  Expected: ${evidenceDir}/`))
-    console.log(chalk.dim('  Evidence is generated after Phase 5 completes.\n'))
+  const { complete, missing } = evidencePackageComplete(storyId)
+  if (!complete) {
+    console.log(chalk.red(`\n  ✗ Evidence package incomplete for ${storyId}`))
+    console.log(chalk.dim('\n  Missing files:'))
+    missing.forEach(f => console.log(chalk.dim(`    ${f}`)))
+    console.log(chalk.yellow('\n  Phase 5 must complete before Gate G4 review.'))
+    console.log(chalk.dim('  Tell the agent: generate the evidence package for ' + storyId + '\n'))
     process.exit(1)
   }
+
+  const evidenceDir = `.agent/evidence/${storyId}`
 
   console.log(chalk.cyan(`\n◆ Gate G4 Review — ${storyId}\n`))
 

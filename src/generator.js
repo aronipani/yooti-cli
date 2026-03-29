@@ -1038,6 +1038,138 @@ STEP 6 — Stop at Gate G3
   AC coverage table, and any deliberate decisions made.
   Do NOT merge the PR. Gate G3 belongs to the developer.
 
+## Phase 5 — mandatory before any PR is opened
+
+Never open a PR before .agent/evidence/[STORY-ID]/ exists.
+A PR without an evidence package is invalid.
+The PR body must be generated FROM the evidence package.
+
+Before opening a PR for any story run these steps in order:
+
+STEP 1 — Run the full test suite
+  Python:
+    pytest -m "not eval" --cov --cov-report=json -q
+  Node.js API:
+    cd services/api && npx vitest run --coverage --reporter=json
+  React frontend:
+    cd frontend/dashboard && npx vitest run --coverage --reporter=json
+
+STEP 2 — Create the evidence folder
+  mkdir -p .agent/evidence/[STORY-ID]
+
+STEP 3 — Write test-results.json
+  {
+    "story_id": "[STORY-ID]",
+    "generated_at": "[ISO timestamp]",
+    "unit": {
+      "total": N,
+      "passed": N,
+      "failed": 0
+    },
+    "integration": {
+      "total": N,
+      "passed": N,
+      "failed": 0
+    }
+  }
+  If any failed > 0: do NOT open a PR. Fix failures first.
+
+STEP 4 — Write coverage-summary.json
+  {
+    "story_id": "[STORY-ID]",
+    "generated_at": "[ISO timestamp]",
+    "overall": N.N,
+    "new_code": N.N,
+    "files": [
+      { "file": "path/to/file.py", "lines": N.N, "branches": N.N }
+    ]
+  }
+  If overall < 80 or new_code < 90: do NOT open a PR. Fix coverage first.
+
+STEP 5 — Write regression-diff.json
+  Run: python tests/regression/comparator/diff.py
+  Write:
+  {
+    "story_id": "[STORY-ID]",
+    "generated_at": "[ISO timestamp]",
+    "baseline_sprint": "sprint-N",
+    "newly_failing": [],
+    "newly_passing": [],
+    "total_tests_before": N,
+    "total_tests_after": N
+  }
+  If newly_failing has any entries: do NOT open a PR. Fix regressions first.
+
+STEP 6 — Write security-scan.json
+  Run snyk and semgrep if available.
+  Write:
+  {
+    "story_id": "[STORY-ID]",
+    "generated_at": "[ISO timestamp]",
+    "snyk": { "critical": 0, "high": 0, "medium": 0, "low": 0 },
+    "semgrep": { "findings": 0 },
+    "scanned_at": "[ISO timestamp]"
+  }
+  If snyk.critical > 0 or snyk.high > 0: do NOT open a PR. Fix first.
+  If semgrep.findings > 0: do NOT open a PR. Fix first.
+  If snyk or semgrep are not installed: write the file with a note
+  and continue — do not block the PR for missing tools.
+
+STEP 7 — Write accessibility.json (frontend stories only)
+  Only write this file if the story touches the frontend layer.
+  {
+    "story_id": "[STORY-ID]",
+    "generated_at": "[ISO timestamp]",
+    "violations": 0,
+    "passes": N,
+    "viewports_tested": [375, 768, 1280]
+  }
+
+STEP 8 — Write pr-body.md
+  Generate from all evidence files above.
+  Format:
+
+  ## [STORY-ID] — [story title]
+
+  ### Acceptance criteria coverage
+  | AC | Status | Test |
+  |----|--------|------|
+  | AC-1 | PASS | test_name |
+
+  ### Test results
+  Unit: N/N passing
+  Integration: N/N passing
+  Regression: 0 newly failing
+
+  ### Coverage
+  Overall: N.N%
+  New code: N.N%
+
+  ### Security
+  Snyk: 0 critical, 0 high
+  Semgrep: 0 findings
+
+  ### Deliberate decisions
+  List any non-obvious choices made during implementation.
+
+  ### Files changed
+  List every file created or modified with line counts.
+
+STEP 9 — Open the PR
+  Only open the PR after all evidence files are written.
+  PR title: [STORY-ID] — [story title]
+  PR body: content of .agent/evidence/[STORY-ID]/pr-body.md
+  Branch: feature/[STORY-ID]
+  Do NOT merge. Stop here. Gate G3 belongs to the developer.
+
+EVIDENCE PACKAGE CHECKLIST — all must exist before PR opens:
+  .agent/evidence/[STORY-ID]/test-results.json      required
+  .agent/evidence/[STORY-ID]/coverage-summary.json  required
+  .agent/evidence/[STORY-ID]/regression-diff.json   required
+  .agent/evidence/[STORY-ID]/security-scan.json     required
+  .agent/evidence/[STORY-ID]/accessibility.json     frontend only
+  .agent/evidence/[STORY-ID]/pr-body.md             required
+
 ## Working in the agents/ layer
 
 When generating or modifying any file inside agents/:

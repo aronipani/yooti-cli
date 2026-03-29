@@ -4,6 +4,22 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 
+export function evidencePackageComplete(storyId) {
+  const evidenceDir = `.agent/evidence/${storyId}`
+  const required = [
+    `${evidenceDir}/test-results.json`,
+    `${evidenceDir}/coverage-summary.json`,
+    `${evidenceDir}/regression-diff.json`,
+    `${evidenceDir}/security-scan.json`,
+    `${evidenceDir}/pr-body.md`,
+  ]
+  const missing = required.filter(f => !existsSync(f))
+  return {
+    complete: missing.length === 0,
+    missing
+  }
+}
+
 export async function sprintStart(options = {}) {
   console.log(chalk.cyan('\n◆ Sprint start\n'))
 

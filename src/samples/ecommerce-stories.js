@@ -714,5 +714,203 @@ export const ecommerceStories = [
     agent_instructions: 'Write the test that demonstrates missing rate limiting FIRST. Confirm it fails. Then implement. Confirm it passes.',
     estimated_complexity: 'S',
     ambiguity_flags: []
+  },
+  {
+    story_id: 'STORY-011',
+    title: 'As a developer, I want a design system configured so that all UI components have consistent visual styling',
+    type: 'feature',
+    priority: 'P0',
+    sprint: 1,
+    affected_layers: ['frontend'],
+    acceptance_criteria: [
+      {
+        id: 'AC-1',
+        given: 'the frontend project is set up',
+        when: 'Tailwind CSS is configured',
+        then: 'a custom colour palette is defined with primary, secondary, success, warning, error, and neutral tokens available as Tailwind classes',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-2',
+        given: 'shadcn/ui is installed',
+        when: 'a developer imports a shadcn component',
+        then: 'the component renders with the project colour tokens applied correctly',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-3',
+        given: 'the design system is configured',
+        when: 'any page is viewed on a mobile device (375px)',
+        then: 'the layout is fully responsive and no horizontal scrollbar appears',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-4',
+        given: 'the design system is configured',
+        when: 'an axe-core accessibility scan runs on any page',
+        then: 'colour contrast ratios meet WCAG AA — at least 4.5:1 for normal text',
+        testable: true,
+        test_layer: 'unit'
+      }
+    ],
+    non_functional_requirements: {
+      performance: 'CSS bundle under 50KB gzipped',
+      accessibility: 'All colour tokens meet WCAG AA contrast ratios',
+      security: 'No external font or icon CDN calls — self-hosted or bundled only'
+    },
+    definition_of_done: [
+      'tailwind.config.js has custom colour palette defined',
+      'shadcn/ui initialised with Button, Card, Input, Badge components available',
+      'globals.css has CSS custom properties matching Tailwind tokens',
+      'Responsive breakpoints tested at 375px, 768px, 1280px',
+      'Colour contrast verified in accessibility test',
+      'Coverage on new code >= 90%',
+      'Accessibility: 0 axe-core violations'
+    ],
+    constitutions_to_apply: ['typescript', 'react', 'security', 'testing'],
+    agent_instructions: 'Configure Tailwind with a warm neutral palette suitable for ecommerce. Primary: a trustworthy blue or indigo. Use shadcn/ui new-york style. Define CSS custom properties in globals.css. Do NOT use external CDN links for fonts.',
+    estimated_complexity: 'S',
+    ambiguity_flags: []
+  },
+  {
+    story_id: 'STORY-012',
+    title: 'As a shopper, I want a consistent page layout with navigation so that I can move around the site easily',
+    type: 'feature',
+    priority: 'P0',
+    sprint: 1,
+    affected_layers: ['frontend'],
+    acceptance_criteria: [
+      {
+        id: 'AC-1',
+        given: 'a shopper visits any page',
+        when: 'the page loads',
+        then: 'they see a header with the shop logo, navigation links (Home, Catalogue, My Orders), a cart icon showing item count, and a Sign In or user name depending on auth state',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-2',
+        given: 'a shopper is on a mobile device (375px wide)',
+        when: 'they tap the hamburger menu',
+        then: 'a mobile navigation drawer opens showing all nav links and closes when a link is tapped',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-3',
+        given: 'a shopper visits any page',
+        when: 'the page loads',
+        then: 'they see a footer with copyright notice and links to Terms and Privacy',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-4',
+        given: 'a shopper navigates between pages',
+        when: 'a page transition occurs',
+        then: 'a loading indicator appears and disappears cleanly with no flash of unstyled content',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-5',
+        given: 'the layout is rendered',
+        when: 'an axe-core scan runs',
+        then: 'there are 0 accessibility violations — nav has role=navigation, landmarks are correct',
+        testable: true,
+        test_layer: 'unit'
+      }
+    ],
+    non_functional_requirements: {
+      performance: 'Layout shell renders in under 100ms with no layout shift',
+      accessibility: 'Skip to main content link present. Nav has aria-label. Mobile menu is keyboard accessible.',
+      security: 'No authentication tokens exposed in the DOM'
+    },
+    definition_of_done: [
+      'Header component with logo, nav, cart icon, auth state',
+      'Mobile nav drawer with hamburger trigger using shadcn/ui Sheet',
+      'Footer component',
+      'RootLayout wraps all pages',
+      'Loading state between page transitions',
+      'All components pass axe-core scan',
+      'Coverage on new code >= 90%',
+      'Accessibility: 0 violations',
+      'Responsive at 375px, 768px, 1280px'
+    ],
+    constitutions_to_apply: ['typescript', 'react', 'security', 'testing'],
+    agent_instructions: 'Header should be sticky. Cart icon shows a badge with item count — use 0 as placeholder if CartContext not yet available. Use shadcn/ui Sheet for mobile drawer. RootLayout wraps all page-level routes. Depends on STORY-011 design system.',
+    estimated_complexity: 'M',
+    ambiguity_flags: []
+  },
+  {
+    story_id: 'STORY-013',
+    title: 'As a shopper, I want clear loading and error states throughout the app so that I always know what is happening',
+    type: 'feature',
+    priority: 'P1',
+    sprint: 1,
+    affected_layers: ['frontend'],
+    acceptance_criteria: [
+      {
+        id: 'AC-1',
+        given: 'any page is loading data from the API',
+        when: 'the request is in flight',
+        then: 'a skeleton loader matching the shape of the content appears — not a spinning circle',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-2',
+        given: 'an API request fails',
+        when: 'the error is caught',
+        then: 'a user-friendly error message appears with a Retry button — no raw error text or stack traces shown',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-3',
+        given: 'a user action succeeds (add to cart, register, login)',
+        when: 'the action completes',
+        then: 'a toast notification appears in the top right for 3 seconds confirming success',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-4',
+        given: 'a user action fails (network error, validation error)',
+        when: 'the error occurs',
+        then: 'a toast notification appears with a red background and descriptive error message',
+        testable: true,
+        test_layer: 'unit'
+      },
+      {
+        id: 'AC-5',
+        given: 'a page has no data to show (empty orders list, no search results)',
+        when: 'the empty state renders',
+        then: 'an illustrated empty state with a helpful message and a relevant CTA button appears',
+        testable: true,
+        test_layer: 'unit'
+      }
+    ],
+    non_functional_requirements: {
+      performance: 'Skeleton loaders appear within 16ms of request start',
+      accessibility: 'Toast notifications announced via aria-live. Skeleton loaders have aria-busy=true.',
+      security: 'Error messages never expose internal details, stack traces, or server paths'
+    },
+    definition_of_done: [
+      'SkeletonCard and SkeletonList components match product card and list shapes',
+      'ErrorBoundary component with retry functionality',
+      'Toast notification system using shadcn/ui Toaster',
+      'EmptyState component with icon, message, and CTA',
+      'All components pass axe-core scan',
+      'Coverage on new code >= 90%',
+      'Toast announcements verified with aria-live'
+    ],
+    constitutions_to_apply: ['typescript', 'react', 'security', 'testing'],
+    agent_instructions: 'Use shadcn/ui Skeleton for loading states. Use shadcn/ui Toaster + toast() for notifications. Skeleton shapes must match real content dimensions. EmptyState accepts icon, title, description, ctaLabel, ctaHref props. Depends on STORY-011 design system.',
+    estimated_complexity: 'M',
+    ambiguity_flags: []
   }
 ]
