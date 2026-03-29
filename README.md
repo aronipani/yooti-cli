@@ -1,66 +1,163 @@
 # Yooti
 
-### Autonomous SDLC Pipeline — from story to production, with humans in control
+### Ship products, not debugging sessions.
 
-> **Yūti** (यूति) — Sanskrit for *joining, union, or mixture*.  
-> Derived from the root *yu* (to join) — the blending of elements,  
-> the act of bringing things together.  
-> In Yooti, that union is humans and agents — each doing what they do best.
+> **Yūti** (यूति) — Sanskrit for *joining, union, or mixture*.
+> The blending of humans and agents — each doing what they do best.
 
 ---
 
-## The problem Yooti solves
+## The problem
 
-Small engineering teams are being asked to deliver more, faster, with fewer people.
-The tools exist — Claude Code, LangGraph, GitHub Actions, Docker — but wiring them
-into a coherent, repeatable delivery system takes weeks. Every new project starts
-from scratch. Every new team member needs onboarding. Every sprint the same manual
-steps: write the requirement, break it into tasks, generate the code, write the
-tests, open the PR, deploy to staging, approve for production.
+Small teams using AI agents ship fast. Then three months in, the codebase
+is inconsistent, tests are missing or meaningless, every new feature breaks
+two existing ones, and the team is debugging production at 2am instead of
+building the next feature.
 
-Yooti replaces that setup time with one command.
+This is vibe coding debt. The faster you shipped without guardrails, the
+slower you go now.
 
-It is not a code generator. It is not an AI assistant. It is a framework that
-installs a complete autonomous delivery pipeline — agent context, pipeline tooling,
-CI workflows, Docker infrastructure, coding constitutions, and team playbook docs —
-and then gets out of the way.
-
-**Your team writes stories. Agents execute. Humans approve. Products ship.**
+Yooti breaks the spiral.
 
 ---
 
-## Framework vs Reference Implementation
+## What Yooti is
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│  THE FRAMEWORK — language agnostic                                  │
-│                                                                     │
-│  Pipeline phases, human gates, adoption stages, agent context,      │
-│  coding constitutions, scope rules, and quality gates work with     │
-│  any language, any framework, and any cloud provider.               │
-│                                                                     │
-│  Java + Spring, Ruby + Rails, Go + Postgres — all supported.        │
-│  The framework cares how you deliver, not what you build with.      │
-│                                                                     │
-├─────────────────────────────────────────────────────────────────────┤
-│  THE REFERENCE IMPLEMENTATION — opinionated by design               │
-│                                                                     │
-│  yooti init generates a working codebase using a specific,          │
-│  pre-wired toolchain. This gets you productive in hours, not weeks. │
-│                                                                     │
-│  If your team uses a different stack, adopt the framework and       │
-│  replace the RI layers with your own. The pipeline, gates, and      │
-│  agent context work either way.                                     │
-└─────────────────────────────────────────────────────────────────────┘
-```
+Yooti is a Specification-Driven Development framework for teams. One command
+installs a complete autonomous delivery pipeline — so your team ships features
+using AI agents without accumulating the technical debt that slows you down later.
+
+    Your team writes stories.
+    The agent reads the spec, generates code, writes tests, and opens a PR.
+    Your team reviews the output at five decision points.
+    Clean, tested, consistent code ships to production.
+
+Not because you have a QA team or a dedicated architect.
+Because the pipeline enforces your standards automatically on every story.
+
+---
+
+## Ship fast AND ship clean
+
+    VIBE CODING                       YOOTI
+    ─────────────────────────────     ────────────────────────────────────
+    Ship fast — fix later             Ship fast — already fixed
+    Tests when you have time          Tests before every merge, always
+    Consistent when you remember      Consistent by default — every story
+    Security audit after incident     Security scan on every PR
+    Debug production at 2am           Catch it in CI before it ships
+    Technical debt compounds          Technical quality compounds
+    Agent amplifies inconsistency     Agent amplifies your patterns
+    Fear of touching working code     Confidence to ship on Friday
+
+---
+
+## How it works
+
+Yooti implements the Specification-Driven Development loop with a governance
+layer that makes it safe to run with a team:
+
+    PHASE 1   You write a story. The agent validates it into a structured spec
+              with Given/When/Then acceptance criteria and a Definition of Done.
+              Ambiguities flagged before any code is written.
+
+    PHASE 2   Agent breaks the story into tasks by layer, writes plan files.
+              Architect reviews the plans. Gate G2 — plans must be approved
+              before any code runs.
+
+    PHASE 3   Feature branch created, pre-flight checks run, regression
+              baseline captured. Automated.
+
+    PHASE 4   Agent writes failing tests first (TDD), then implementation.
+              Runs lint, type check, tests — self-heals up to 5 iterations.
+              Escalates if it cannot converge.
+
+    PHASE 5   Full test suite, coverage, regression diff, security scan,
+              accessibility check, code audit against your coding patterns.
+              Everything packaged into an evidence file before the PR opens.
+
+    PHASE 6   Agent opens a PR with the complete evidence as the body.
+              Developer reviews code, edits if needed, approves.
+              Gate G3 — happens in GitHub, no extra CLI step.
+
+    PHASE 7   Staging deploy, smoke tests, health report.
+              Gate G5 — release manager approves production.
+
+---
+
+## The five human decisions
+
+The pipeline stops at five points and waits for a human. These are the
+decisions that require judgement. Everything else is automated.
+
+    G1   PM — stories are complete and unambiguous before sprint starts
+    G2   Architect — implementation plans are sound before code is written
+    G3   Developer — code is correct and safe to merge (in GitHub)
+    G4   QA — quality evidence is sufficient
+    G5   Release Manager — safe to deploy to production
+
+---
+
+## What makes agent code consistent
+
+The **constitution system** is the answer to vibe coding inconsistency.
+
+Constitution files capture how your team writes code — security patterns,
+test patterns, error handling, config rules, Docker port conventions —
+and the agent reads them before writing any file.
+
+    .claude/constitutions/
+      security.md       No hardcoded secrets, parameterised queries, auth on endpoints
+      testing.md        TDD, mocking rules, coverage thresholds
+      python.md         Type hints, ruff, mypy strict
+      react.md          Component patterns, axe-core in every test
+      config.md         .env rules, pyproject.toml standards
+      docker.md         Port matching, health checks, Dockerfile rules
+
+You write the constitutions. The agent follows them. Every story, every sprint.
+The codebase stays consistent even when the agent writes most of it.
+
+---
+
+## What Yooti installs
+
+One command. Everything your team needs.
+
+    Agent context         .claude/CLAUDE.md — phases, gates, rules, toolchain
+    Coding constitutions  .claude/constitutions/ — your patterns, enforced
+    Pipeline tooling      .agent/ — requirements, plans, evidence, gates, audit
+    Pipeline scripts      preflight, snapshot, regression diff, PR body generator
+    CI workflows          unit tests, security scan, mutation testing, G3 automation
+    Docker infrastructure docker-compose.yml — full local stack
+    Team playbooks        GATES.md, PROMPTS.md — exact prompts for every stage
+
+---
+
+## Adoption stages — start where your team is
+
+You do not have to go all-in on Day 1.
+
+    STAGE 1   Agent parses stories. Team writes all the code.
+              Same workflow, better structure and CI.
+
+    STAGE 2   Agent writes implementation plans. Team writes code from plans.
+
+    STAGE 3   Agent writes code and tests. Team reviews PRs.  ← start here
+              Recommended for most teams. Five gates, everything else automated.
+
+    STAGE 4   Agent deploys to staging. Team approves production.
+
+    STAGE 5   Agent runs all seven phases. Team owns five gates only.
+              Write a story Monday. Review a PR Tuesday.
+
+Trust builds incrementally. You advance a stage when your team is ready.
+The governance layer is what makes Stage 5 safe to reach — not a barrier to it.
 
 ---
 
 ## Prerequisites
 
-```bash
-yooti doctor    # checks everything and shows install instructions
-```
+    yooti doctor    # checks everything and shows install instructions
 
 | Tool | Version | Purpose |
 |------|---------|---------|
@@ -71,294 +168,133 @@ yooti doctor    # checks everything and shows install instructions
 | Python | >= 3.12 | Python layers + pipeline scripts |
 | Claude Code | any | Code generation agent |
 
-```bash
-# Mac
-brew install node@20 git gh python@3.12
-npm install -g @anthropic-ai/claude-code
-
-# Windows
-winget install OpenJS.NodeJS.LTS Git.Git GitHub.cli Python.Python.3.12
-npm install -g @anthropic-ai/claude-code
-
-# Install Yooti
-npm install -g @yooti/cli
-yooti doctor     # verify prerequisites
-```
-
 ---
 
 ## Quick start
 
-```bash
-yooti init my-product                            # wizard — 2 minutes
-cd my-product
-docker compose up -d                             # full local stack
-yooti story:sample --app ecommerce --sprint 1   # 9 demo stories
-yooti story:approve --all                        # Gate G1
-yooti sprint:start                               # capture baseline
-```
+    npm install -g @yooti/cli
+    yooti doctor                                    # verify prerequisites
+    yooti init my-product                           # wizard — 2 minutes
+    cd my-product
+    docker compose up -d                            # full local stack
+    yooti story:sample --app ecommerce --sprint 1  # 9 demo stories
+    yooti story:approve --all                       # Gate G1
+    yooti sprint:start                              # capture baseline
 
 Then in Claude Code:
-```
-Proceed to Phase 2 for all new stories.
-```
 
----
-
-## The pipeline
-
-Every story goes through seven phases. Same seven phases, every sprint, every story.
-
-```
-PHASE 1   Requirements ingestion
-          Agent validates the story, generates structured AC in
-          Given/When/Then format, flags ambiguities, estimates complexity.
-          Automated — no human gate.
-
-PHASE 2   Story decomposition
-          Agent breaks story into tasks by layer, writes .plan.md files.
-          Each plan defines exact file scope, AC coverage, implementation steps.
-          Plans only — no code written yet.
-          ── STOP → Gate G2 (Architect reviews plans) ──────────────────────
-
-PHASE 3   Environment setup
-          Feature branch created, preflight checks run,
-          regression baseline captured. Automated.
-
-PHASE 4   Code generation
-          Agent writes failing tests first (TDD), then implementation.
-          Runs lint → type check → unit tests → self-heals up to 5 times.
-          Escalates to developer if it cannot converge.
-
-PHASE 5   Test orchestration + evidence package
-          Full test suite, coverage, regression diff, security scan,
-          accessibility check, code audit against constitutions.
-          Evidence package written to .agent/evidence/[ID]/
-          ── STOP → Gate G3 (Developer reviews PR in GitHub) ───────────────
-
-PHASE 6   PR review
-          PR opened with complete evidence package as the PR body.
-          Developer reads code, edits if needed, approves or rejects.
-          Gate G3 happens entirely in GitHub — no CLI required.
-          ── STOP → Gate G4 (QA reviews evidence) ─────────────────────────
-
-PHASE 7   Deploy
-          Staging deploy, smoke tests, health report generated.
-          ── STOP → Gate G5 (Release Manager approves production) ──────────
-```
-
----
-
-## The five human gates
-
-```
-GATE    ROLE              WHEN                        DECISION
-──────  ────────────────  ──────────────────────────  ────────────────────────────
-G1      Product Manager   Before sprint starts        Stories are complete + ready
-G2      Architect         After plans, before code    Plans are structurally sound
-G3      Developer         After agent opens PR        Code is correct + safe
-G4      QA / SDET         After evidence package      Quality evidence is sufficient
-G5      Release Manager   After staging deploy        Safe to deploy to production
-```
-
-These are real decisions — not rubber stamps.
-
----
-
-## Ticket IDs — use your own convention
-
-Yooti accepts any ticket ID format.
-
-```bash
-STORY-001   BUG-042   FEAT-007   PROJ-123   ISS-007
-```
-
-All commands accept any format:
-```bash
-yooti plan:review BUG-042
-yooti qa:review FEAT-007
-yooti story:approve PROJ-123
-
-# Import sample stories with a custom prefix
-yooti story:sample --app ecommerce --prefix PROJ
-# Creates PROJ-001, PROJ-002 etc.
-```
-
----
-
-## Coding constitutions
-
-Constitution files tell the agent exactly how to write code for your stack.
-The agent reads them before writing any file. Phase 5 audits every file against
-them before a PR is opened.
-
-```
-.claude/constitutions/
-  security.md       Always — no secrets, parameterised queries, auth on endpoints
-  testing.md        Always — TDD, mocking, coverage thresholds
-  python.md         Python stack — type hints, ruff, mypy strict
-  react.md          React — component patterns, axe-core in every test
-  typescript.md     Node — types, ESLint
-  langgraph.md      Agents — state immutability, node rules
-  postgresql.md     Database — query patterns, migration rules
-  config.md         Always — .env rules, pyproject.toml standards
-  docker.md         Docker — port matching, health checks, Dockerfile rules
-```
-
----
-
-## Project types
-
-```bash
-yooti init my-product --type full     # Frontend + API + Agents + Batch
-yooti init my-api     --type web      # Frontend + API
-yooti init my-agent   --type agent    # Agents only
-```
-
-### Full stack (type=full)
-
-```
-Frontend      TypeScript + React 18 + Vite + shadcn/ui + Tailwind
-API           TypeScript + Node.js 20 + Fastify + Prisma + PostgreSQL
-              OR Python 3.12 + FastAPI + SQLAlchemy
-Agents        Python 3.12 + LangGraph + LangChain + FastAPI
-Batch         Python 3.12 + boto3 + pandas
-Database      PostgreSQL 16 + pgvector + Redis 7
-CI            GitHub Actions — unit tests + security scan + mutation testing
-Containers    Docker + docker-compose
-```
-
----
-
-## Pipeline adoption stages
-
-Start at Stage 3. Advance when your team is ready.
-
-```
-STAGE 1 — Foundation     Agent parses stories. Team writes all code.
-STAGE 2 — Build          Agent writes plans. Team writes code from plans.
-STAGE 3 — Review ★       Agent writes code + tests. Team reviews PRs.
-                         Recommended starting point for most teams.
-STAGE 4 — Deploy         Agent deploys to staging. Team approves production.
-STAGE 5 — Autonomous     Agent runs all seven phases. Team controls 5 gates only.
-```
-
-```bash
-yooti configure --stage 4    # advance when ready
-```
+    Proceed to Phase 2 for all new stories.
 
 ---
 
 ## Command reference
 
 ### Project setup
-```bash
-yooti doctor                          # check all prerequisites
-yooti init [name]                     # scaffold new project — wizard
-yooti init [name] --type full         # full product (no wizard)
-yooti init [name] --type web          # web + API (no wizard)
-yooti init [name] --type agent        # agents only (no wizard)
-yooti preflight                       # run pre-flight checks
-yooti configure                       # change adoption stage interactively
-yooti snapshot [tag]                  # capture regression baseline
-```
+    yooti doctor                          # check prerequisites
+    yooti init [name]                     # scaffold new project
+    yooti preflight                       # run pre-flight checks
+    yooti configure                       # change adoption stage
+    yooti snapshot [tag]                  # capture regression baseline
 
 ### Story management (PM — Gate G1)
-```bash
-yooti story:add                       # add a story — interactive wizard
-yooti story:approve [id]              # Gate G1 — approve one story
-yooti story:approve --all             # Gate G1 — approve all stories
-yooti story:import --file path        # import stories from JSON file
-yooti story:sample --list             # list built-in sample apps
-yooti story:sample --app ecommerce    # import ecommerce demo stories
-yooti story:sample --app ecommerce --sprint 1     # Sprint 1 only
-yooti story:sample --app ecommerce --prefix PROJ  # custom ID prefix
-```
+    yooti story:add                       # add story — interactive wizard
+    yooti story:approve --all             # Gate G1 — approve all stories
+    yooti story:import --file path        # import from JSON file
+    yooti story:sample --app ecommerce    # import demo stories
 
 ### Task and plan management (Architect — Gate G2)
-```bash
-yooti task:add [id]                   # add a task to a story
-yooti task:list [id]                  # list tasks and their status
-yooti plan:amend <task-id>            # amend scope, steps, or annotations
-yooti plan:review [id]                # interactive G2 review — walks each task
-yooti plan:approve <id>               # sign Gate G2
-```
-
-### Context and corrections (All roles)
-```bash
-yooti context:add <id> --url <url>    # attach a URL as context
-yooti context:add <id> --file <path>  # attach a local file
-yooti context:add <id> --note "..."   # attach a freeform note
-yooti context:list <id>               # list all context for a story
-yooti correct:inject <task-id>        # inject a developer correction
-yooti test:require [id]               # add a QA test requirement
-```
+    yooti task:add [id]                   # add a task mid-sprint
+    yooti task:list [id]                  # list tasks and status
+    yooti plan:review [id]                # interactive G2 review
+    yooti plan:amend task-id              # amend scope or annotations
 
 ### Sprint management
-```bash
-yooti sprint:start                    # preflight + baseline + validate stories
-yooti sprint:report                   # sprint summary — gates + coverage + DoD
-yooti sprint:retro                    # sprint retrospective
-yooti sm:standup                      # daily standup from pipeline data
-```
+    yooti sprint:start                    # preflight + baseline + validate
+    yooti sprint:report                   # sprint summary
+    yooti sprint:retro                    # sprint retrospective
+    yooti sm:standup                      # daily standup from pipeline data
 
 ### QA (SDET — Gate G4)
-```bash
-yooti qa:plan [id]                    # create a QA test plan
-yooti qa:review [id]                  # Gate G4 — review evidence package
-```
+    yooti qa:plan [id]                    # create QA test plan
+    yooti qa:review [id]                  # Gate G4 — review evidence
+
+### Corrections and context
+    yooti correct:inject task-id          # inject a developer correction
+    yooti context:add id --url <url>      # attach URL context
+    yooti context:add id --note "..."     # attach a note
+    yooti test:require [id]               # add QA test requirement
 
 ### Audit and reporting
-```bash
-yooti audit <id>                      # full audit trail for a story
-yooti audit <id> --gates              # gate decisions only
-yooti audit <id> --diff               # file changes only
-yooti log:event [id]                  # manually log a pipeline event
-```
+    yooti audit id                        # full audit trail
+    yooti audit id --gates                # gate decisions only
+    yooti log:event [id]                  # manually log a pipeline event
+
+---
+
+## Ticket IDs — use your own convention
+
+    STORY-001   BUG-042   FEAT-007   PROJ-123   ISS-007
+
+All commands accept any format:
+
+    yooti story:approve BUG-042
+    yooti plan:review FEAT-007
+    yooti story:sample --app ecommerce --prefix PROJ   # custom prefix
 
 ---
 
 ## Quality gates — enforced in CI on every PR
 
-| Check | Tool | Threshold | Blocks PR |
-|-------|------|-----------|-----------|
-| Lint | ESLint / Biome / Ruff | 0 warnings | Yes |
-| Type check | tsc / mypy | 0 errors | Yes |
-| Unit tests | Vitest / pytest | 100% pass | Yes |
-| Integration tests | Vitest / pytest | 100% pass | Yes |
-| Coverage overall | Istanbul / pytest-cov | >= 80% | Yes |
-| Coverage new code | Istanbul / pytest-cov | >= 90% | Yes |
-| Regression diff | diff.py | 0 newly failing | Yes |
-| Security deps | Snyk | 0 HIGH/CRITICAL | Yes |
-| Security code | Semgrep | 0 findings | Yes |
-| Accessibility | axe-core | 0 violations | Yes (frontend) |
-| Code audit | Phase 5 self-audit | 0 violations | Yes |
-| Mutation score | Stryker / mutmut | >= 85% | Warn |
+| Check | Threshold | Blocks PR |
+|-------|-----------|-----------|
+| Lint | 0 warnings | Yes |
+| Type check | 0 errors | Yes |
+| Unit tests | 100% pass | Yes |
+| Coverage overall | >= 80% | Yes |
+| Coverage new code | >= 90% | Yes |
+| Regression diff | 0 newly failing | Yes |
+| Security deps (Snyk) | 0 HIGH/CRITICAL | Yes |
+| Security code (Semgrep) | 0 findings | Yes |
+| Accessibility | 0 violations | Yes (frontend) |
+| Code audit vs constitutions | 0 violations | Yes |
+| Mutation score | >= 85% | Warn |
 
 ---
 
-## Built-in sample apps
+## Built-in demo app
 
-```bash
-yooti story:sample --list
-yooti story:sample --app ecommerce           # all 13 stories
-yooti story:sample --app ecommerce --sprint 1   # Sprint 1 — 9 stories
-```
+    yooti story:sample --app ecommerce    # 13 stories, 2 sprints
 
-| App | Stories | Sprints | What it covers |
-|-----|---------|---------|----------------|
-| ecommerce | 13 | 2 | Catalogue, cart, auth, checkout, search, admin, design system |
+Sprint 1: catalogue, product detail, registration, login, cart,
+rate limiting, design system, layout, loading states.
+
+Sprint 2: checkout, order history, search, admin.
+
+---
+
+## Framework vs Reference Implementation
+
+The **framework** is language agnostic — the pipeline phases, human gates,
+constitution system, and quality gates work with any stack.
+
+The **Reference Implementation** is opinionated — TypeScript, React, Python,
+LangGraph, PostgreSQL, Docker. A deliberate starting point, not a constraint.
+
+If your team uses a different stack, adopt the framework in brownfield mode
+and replace the RI layers with your own:
+
+    yooti init . --context brownfield
 
 ---
 
 ## Yooti OS (optional)
 
-Yooti works completely standalone. Yooti OS is an optional commercial layer that
-adds behavioral quality monitoring using Statistical Process Control (SPC).
-It tracks iteration counts, scope violations, test pass rates, coverage deltas,
-and deployment success rates across every agent, story, and sprint.
+Yooti works completely standalone. Yooti OS is an optional commercial layer
+that adds Statistical Process Control monitoring — tracking agent iteration
+counts, scope violations, test pass rates, and coverage deltas across every
+story and sprint. Surfaces behavioral drift before it becomes a problem.
 
-Enable at init: `yooti init my-product --yooti-os`
+Enable: `yooti init my-product --yooti-os`
 
 ---
 
