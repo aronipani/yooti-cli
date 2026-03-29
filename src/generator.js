@@ -16,6 +16,7 @@ import { testingConstitution } from './templates/constitutions/testing-constitut
 import { mongodbConstitution } from './templates/constitutions/mongodb-constitution.js';
 import { configConstitution } from './templates/constitutions/config-constitution.js';
 import { dockerConstitution } from './templates/constitutions/docker-constitution.js';
+import { awsConstitution } from './templates/constitutions/aws-constitution.js';
 import {
   featureStoryTemplate, bugfixStoryTemplate, refactorStoryTemplate,
   agentStoryTemplate, securityPatchTemplate, apiContractTemplate
@@ -925,6 +926,13 @@ export async function generateFiles(config) {
     `${root}/docs`,
   ];
 
+  if (config.includeAws) {
+    dirs.push(
+      `${root}/scripts`,
+      `${root}/events`,
+    );
+  }
+
   if (config.stack.includes('node')) {
     dirs.push(
       `${root}/services/api/src/routes`,
@@ -1492,6 +1500,11 @@ React components:             .claude/constitutions/react.md` : ''}
 ${config.hasPostgres ? `
 Database queries or schemas:  .claude/constitutions/postgresql.md` : ''}
 
+${config.includeAws ? `
+AWS services:        .claude/constitutions/aws.md
+  Covers: ${(config.awsServices || []).join(', ')}
+  Rules: moto in every unit test, single table DynamoDB, batchItemFailures SQS,
+         no hardcoded ARNs, Secrets Manager for credentials, LocalStack locally` : ''}
 Configuration files (.env, pyproject.toml, vitest.config): .claude/constitutions/config.md
 Docker files (Dockerfile, docker-compose.yml):             .claude/constitutions/docker.md
 
@@ -1622,6 +1635,22 @@ AGENTS.md should contain:
   Reference to this CLAUDE.md as the primary context file
   Explicit instruction to read .claude/constitutions/ before coding
   Same gate and evidence requirements as Claude Code
+` : ''}
+${config.includeAws ? `
+## AWS local development
+
+LocalStack runs all AWS services locally at http://localhost:4566
+Start: docker compose up localstack -d
+Setup: python scripts/create_local_resources.py
+Test:  python scripts/invoke_local.py
+
+AWS region: ${config.awsRegion || 'us-east-1'}
+Services:   ${(config.awsServices || []).join(', ')}
+Deploy:     ${config.awsDeploy || 'sam'}
+
+Unit tests use moto — never real AWS, never LocalStack
+Integration tests use LocalStack — docker compose up localstack -d first
+Staging/production — real AWS, IAM roles, Secrets Manager
 ` : ''}`);
 
   // ── .claude/agents/ ──
@@ -2323,6 +2352,30 @@ ${agentDeps.map(d => `      - ${d}`).join('\n')}
     restart: unless-stopped`);
   }
 
+  // LocalStack for AWS integration testing
+  if (config.includeAws) {
+    const localstackServices = buildLocalStackServices(config.awsServices);
+    const awsRegion = config.awsRegion || 'us-east-1';
+    composeParts.push(`
+  localstack:
+    image: localstack/localstack:3
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=${localstackServices}
+      - DEFAULT_REGION=${awsRegion}
+      - AWS_DEFAULT_REGION=${awsRegion}
+    volumes:
+      - ./localstack-data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped`);
+  }
+
   // Volumes
   const composeVolumes = [];
   if (hasPostgres) composeVolumes.push('  pg_data:');
@@ -2484,6 +2537,10 @@ Blocks: T002
   write('.claude/constitutions/config.md', configConstitution(config));
   write('.claude/constitutions/docker.md', dockerConstitution(config));
 
+  if (config.includeAws) {
+    write('.claude/constitutions/aws.md', awsConstitution(config));
+  }
+
   const hasAgentsConst = config.projectType === 'full' || config.projectType === 'agent';
   if (hasAgentsConst) {
     write('.claude/constitutions/langgraph.md', langgraphConstitution(config));
@@ -2503,6 +2560,18 @@ Blocks: T002
 
   if (hasAgentsConst) {
     write('.agent/templates/agent-story.json', JSON.stringify(agentStoryTemplate(config), null, 2));
+  }
+
+  // ── AWS scaffolding ──
+  if (config.includeAws) {
+    write('.agent/templates/aws-lambda.json', awsLambdaStoryTemplate());
+    write('scripts/create_local_resources.py', createLocalResourcesScript(config));
+    write('scripts/invoke_local.py', invokeLocalScript(config));
+    write('.env.aws.example', awsEnvExample(config));
+    generateTestEvents(write, config);
+    if (config.awsDeploy === 'sam') {
+      write('template.yaml', samTemplate(config));
+    }
   }
 
   // ── Regression suite ──
@@ -2638,7 +2707,7 @@ ${ciEnv}${config.stack.includes('react') || config.stack.includes('nextjs') ? ` 
   }
 
   // ── Root files (before agent scaffold so agents can append to .env.example) ──
-  write('.gitignore', `node_modules/\n.env\n*.env.local\ndist/\n.coverage/\n__pycache__/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\nplaywright-report/\n.lighthouseci/\n`);
+  write('.gitignore', `node_modules/\n.env\n*.env.local\ndist/\n.coverage/\n__pycache__/\n.pytest_cache/\n.mypy_cache/\n.ruff_cache/\nplaywright-report/\n.lighthouseci/\nlocalstack-data/\n`);
 
   write('.env.example', envExampleTemplate(config));
 
@@ -2853,6 +2922,9 @@ GO: deploy | NO-GO: hold
 
   write('docs/PROMPTS.md', promptsGuideTemplate(config));
   write('docs/CUSTOMISING.md', generateCustomisingMd(config));
+  if (config.includeAws) {
+    write('docs/AWS-GUIDE.md', awsGuideTemplate(config));
+  }
 
   // ── Verify critical files exist ──
   const criticalFiles = [];
@@ -4240,6 +4312,134 @@ print(f'✓ Coverage: overall={overall}% new_code={new_code}%')
 
 // ── CUSTOMISING.md template ──
 
+function awsGuideTemplate(config) {
+  const region   = config.awsRegion || 'us-east-1'
+  const services = config.awsServices || []
+  const name     = config.projectName
+  const deploy   = config.awsDeploy || 'sam'
+
+  return `# AWS Development Guide — ${name}
+
+Region: ${region}
+Services: ${services.join(', ')}
+Deploy: ${deploy}
+
+---
+
+## Quick start
+
+    # 1. Start LocalStack
+    docker compose up localstack -d
+
+    # 2. Create local resources (DynamoDB tables, SQS queues, etc.)
+    python scripts/create_local_resources.py
+
+    # 3. Run a Lambda handler locally
+    python scripts/invoke_local.py
+
+    # 4. Run unit tests (uses moto — no LocalStack needed)
+    pytest tests/unit/
+
+    # 5. Run integration tests (uses LocalStack)
+    pytest tests/integration/
+
+---
+
+## Environment setup
+
+Copy the AWS environment file:
+
+    cp .env.aws.example .env
+
+This sets \`AWS_ENDPOINT_URL=http://localhost:4566\` which redirects
+all boto3 calls to LocalStack. Remove that line for staging/production.
+
+---
+
+## Testing strategy
+
+| Layer | Tool | AWS calls? | When |
+|-------|------|-----------|------|
+| Unit tests | moto (@mock_aws) | No — fully mocked | Every commit |
+| Integration | LocalStack | Yes — local emulation | Every PR |
+| Staging | Real AWS | Yes — real services | After G4 |
+| Production | Real AWS | Yes — real services | After G5 |
+
+Unit tests must NEVER call real AWS or LocalStack.
+Use the \`@mock_aws\` decorator from moto for every test.
+
+---
+
+## Resource names
+
+| Resource | Local name | Staging/Prod pattern |
+|----------|-----------|---------------------|
+${services.includes('dynamodb')    ? `| DynamoDB table | ${name} | ${name}-{env} |\n` : ''}\
+${services.includes('sqs')         ? `| SQS queue | ${name}-queue | ${name}-queue-{env} |\n| SQS DLQ | ${name}-dlq | ${name}-dlq-{env} |\n` : ''}\
+${services.includes('sns')         ? `| SNS topic | ${name}-topic | ${name}-topic-{env} |\n` : ''}\
+${services.includes('eventbridge') ? `| EventBridge bus | ${name}-bus | ${name}-bus-{env} |\n` : ''}\
+${services.includes('s3')          ? `| S3 bucket | ${name}-data | ${name}-data-{env} |\n` : ''}\
+
+---
+
+## Scripts
+
+| Script | Purpose |
+|--------|---------|
+| \`scripts/create_local_resources.py\` | Create DynamoDB tables, SQS queues, etc. in LocalStack |
+| \`scripts/invoke_local.py\` | Invoke a Lambda handler locally against LocalStack |
+
+---
+
+## Test events
+
+Test event files in \`events/\` match API Gateway and SQS formats:
+
+| File | Description |
+|------|-------------|
+${services.includes('lambda') ? `| \`events/api_post_valid.json\` | Valid POST request |\n| \`events/api_post_invalid.json\` | Invalid POST (empty body) |\n| \`events/api_get_by_id.json\` | GET with path parameter |\n` : ''}\
+${services.includes('sqs') ? `| \`events/sqs_batch.json\` | SQS batch with 2 messages |\n` : ''}\
+
+Use with invoke script:
+
+    python scripts/invoke_local.py --event events/api_post_valid.json
+
+---
+${deploy === 'sam' ? `
+## SAM deployment
+
+The \`template.yaml\` at the project root defines all Lambda functions
+and AWS resources.
+
+    # Validate template
+    sam validate
+
+    # Build
+    sam build
+
+    # Deploy to dev
+    sam deploy --stack-name ${name}-dev --parameter-overrides Environment=dev
+
+    # Deploy to staging
+    sam deploy --stack-name ${name}-staging --parameter-overrides Environment=staging
+
+    # Local API (uses Docker)
+    sam local start-api --env-vars .env
+` : ''}
+---
+
+## Constitution rules (summary)
+
+The full rules are in \`.claude/constitutions/aws.md\`. Key points:
+
+- **Testing**: moto for unit tests, LocalStack for integration
+- **DynamoDB**: Single table design, no Scan, conditional writes for idempotency
+- **SQS**: Return batchItemFailures, never fail whole batch, always have DLQ
+- **Lambda**: All config from os.environ, catch all exceptions, no global mutable state
+- **Credentials**: IAM roles in production, Secrets Manager for secrets, never hardcode
+`
+}
+
 function generateCustomisingMd(config) {
   return `# Customising Your Pipeline — ${config.projectName}
 
@@ -4444,6 +4644,485 @@ as described in Phase 5 of CLAUDE.md.
 
 // ── yooti.config.json template ──
 
+// ── AWS scaffolding templates ──
+
+function createLocalResourcesScript(config) {
+  const services  = config.awsServices || []
+  const region    = config.awsRegion || 'us-east-1'
+  const name      = config.projectName
+  const hasDynamo = services.includes('dynamodb')
+  const hasSQS    = services.includes('sqs')
+  const hasSNS    = services.includes('sns')
+  const hasS3     = services.includes('s3')
+  const hasEB     = services.includes('eventbridge')
+
+  return `#!/usr/bin/env python3
+"""
+Create local AWS resources in LocalStack.
+Run once after: docker compose up localstack -d
+
+Usage:
+    python scripts/create_local_resources.py
+"""
+import boto3
+import json
+import os
+import sys
+import time
+
+ENDPOINT  = os.environ.get("AWS_ENDPOINT_URL", "http://localhost:4566")
+REGION    = os.environ.get("AWS_DEFAULT_REGION", "${region}")
+CREDS     = {
+    "endpoint_url":          ENDPOINT,
+    "region_name":           REGION,
+    "aws_access_key_id":     os.environ.get("AWS_ACCESS_KEY_ID", "test"),
+    "aws_secret_access_key": os.environ.get("AWS_SECRET_ACCESS_KEY", "test"),
+}
+
+
+def wait_for_localstack():
+    import urllib.request
+    for attempt in range(30):
+        try:
+            urllib.request.urlopen(f"{ENDPOINT}/_localstack/health", timeout=2)
+            print(f"✓ LocalStack is ready at {ENDPOINT}")
+            return
+        except Exception:
+            print(f"  Waiting for LocalStack... ({attempt + 1}/30)")
+            time.sleep(2)
+    print("✗ LocalStack did not start in time")
+    print("  Run: docker compose up localstack -d")
+    sys.exit(1)
+
+${hasDynamo ? `
+def create_dynamodb_tables():
+    client = boto3.client("dynamodb", **CREDS)
+    tables = [
+        {
+            "TableName": "${name}",
+            "AttributeDefinitions": [
+                {"AttributeName": "PK", "AttributeType": "S"},
+                {"AttributeName": "SK", "AttributeType": "S"},
+            ],
+            "KeySchema": [
+                {"AttributeName": "PK", "KeyType": "HASH"},
+                {"AttributeName": "SK", "KeyType": "RANGE"},
+            ],
+            "BillingMode": "PAY_PER_REQUEST",
+        }
+    ]
+    for table in tables:
+        try:
+            client.create_table(**table)
+            print(f"✓ DynamoDB table: {table['TableName']}")
+        except client.exceptions.ResourceInUseException:
+            print(f"~ DynamoDB table exists: {table['TableName']}")
+` : ''}
+${hasSQS ? `
+def create_sqs_queues():
+    client = boto3.client("sqs", **CREDS)
+    queues = [
+        {"QueueName": "${name}-dlq"},
+        {"QueueName": "${name}-queue"},
+    ]
+    for q in queues:
+        client.create_queue(**q)
+        print(f"✓ SQS queue: {q['QueueName']}")
+` : ''}
+${hasSNS ? `
+def create_sns_topics():
+    client = boto3.client("sns", **CREDS)
+    response = client.create_topic(Name="${name}-topic")
+    print(f"✓ SNS topic: {response['TopicArn']}")
+    return response['TopicArn']
+` : ''}
+${hasS3 ? `
+def create_s3_buckets():
+    client = boto3.client("s3", **CREDS)
+    buckets = ["${name}-data", "${name}-firehose"]
+    for bucket in buckets:
+        try:
+            client.create_bucket(Bucket=bucket)
+            print(f"✓ S3 bucket: {bucket}")
+        except Exception as e:
+            if "BucketAlreadyOwnedByYou" in str(e):
+                print(f"~ S3 bucket exists: {bucket}")
+            else:
+                raise
+` : ''}
+${hasEB ? `
+def create_eventbridge_bus():
+    client = boto3.client("events", **CREDS)
+    try:
+        client.create_event_bus(Name="${name}-bus")
+        print("✓ EventBridge bus: ${name}-bus")
+    except client.exceptions.ResourceAlreadyExistsException:
+        print("~ EventBridge bus exists: ${name}-bus")
+` : ''}
+
+if __name__ == "__main__":
+    print(f"Creating local AWS resources in LocalStack ({ENDPOINT})...\\n")
+    wait_for_localstack()
+${hasDynamo ? '    create_dynamodb_tables()' : ''}
+${hasSQS    ? '    create_sqs_queues()' : ''}
+${hasSNS    ? '    create_sns_topics()' : ''}
+${hasS3     ? '    create_s3_buckets()' : ''}
+${hasEB     ? '    create_eventbridge_bus()' : ''}
+    print("\\n✓ Local environment ready")
+    print(f"  All services at {ENDPOINT}")
+    print("\\nQuick checks:")
+${hasDynamo ? `    print("  aws dynamodb list-tables")` : ''}
+${hasSQS    ? `    print("  aws sqs list-queues")` : ''}
+${hasS3     ? `    print("  aws s3 ls")` : ''}
+`
+}
+
+function invokeLocalScript(config) {
+  const name = config.projectName
+  return `#!/usr/bin/env python3
+"""
+Invoke a Lambda handler locally against LocalStack.
+Edit the EVENT dict to match your use case.
+
+Usage:
+    python scripts/invoke_local.py
+    python scripts/invoke_local.py --handler src.handlers.my_handler
+"""
+import argparse
+import importlib
+import json
+import os
+import sys
+from dotenv import load_dotenv
+
+# Load .env — sets AWS_ENDPOINT_URL to point at LocalStack
+load_dotenv()
+
+# Default test event — edit this to match your handler's input
+EVENT = {
+    "httpMethod": "POST",
+    "path": "/items",
+    "pathParameters": None,
+    "queryStringParameters": None,
+    "headers": {"Content-Type": "application/json"},
+    "body": json.dumps({
+        "name": "test-item",
+        "value": 42,
+    }),
+    "isBase64Encoded": False,
+}
+
+
+class LocalContext:
+    """Minimal Lambda context object for local testing."""
+    function_name    = "${name}-local"
+    memory_limit_in_mb = 128
+    aws_request_id   = "local-invoke-001"
+    invoked_function_arn = "arn:aws:lambda:us-east-1:000000000000:function:${name}"
+    def get_remaining_time_in_millis(self): return 30000
+
+
+def invoke(handler_path: str, event: dict):
+    module_path, func_name = handler_path.rsplit(".", 1)
+    module = importlib.import_module(module_path)
+    handler_func = getattr(module, func_name)
+
+    print(f"Invoking {handler_path}")
+    print(f"Endpoint: {os.environ.get('AWS_ENDPOINT_URL', 'real AWS')}")
+    print(f"Event: {json.dumps(event, indent=2)}\\n")
+
+    response = handler_func(event, LocalContext())
+
+    print(f"Status:  {response.get('statusCode')}")
+    try:
+        body = json.loads(response.get("body", "{}"))
+        print(f"Body:\\n{json.dumps(body, indent=2)}")
+    except Exception:
+        print(f"Body: {response.get('body')}")
+    return response
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--handler", default="src.handlers.create_item.handler",
+                        help="Python module path to handler function")
+    parser.add_argument("--event", help="Path to JSON event file")
+    args = parser.parse_args()
+
+    event = EVENT
+    if args.event:
+        with open(args.event) as f:
+            event = json.load(f)
+
+    invoke(args.handler, event)
+`
+}
+
+function awsEnvExample(config) {
+  const services  = config.awsServices || []
+  const region    = config.awsRegion || 'us-east-1'
+  const name      = config.projectName
+  const account   = '000000000000'
+
+  return `# ─────────────────────────────────────────────────────────────────
+# LOCAL DEVELOPMENT — points to LocalStack
+# For staging/production: remove AWS_ENDPOINT_URL and set real values
+# NEVER commit real credentials to version control
+# ─────────────────────────────────────────────────────────────────
+
+# LocalStack credentials (fake — LocalStack accepts anything)
+AWS_ACCESS_KEY_ID=test
+AWS_SECRET_ACCESS_KEY=test
+AWS_DEFAULT_REGION=${region}
+
+# Redirects all boto3 calls to LocalStack
+# Remove this line for staging/production
+AWS_ENDPOINT_URL=http://localhost:4566
+
+${services.includes('dynamodb') ? `# DynamoDB
+TABLE_NAME=${name}
+` : ''}${services.includes('sqs') ? `# SQS
+QUEUE_URL=http://localhost:4566/${account}/${name}-queue
+DLQ_URL=http://localhost:4566/${account}/${name}-dlq
+` : ''}${services.includes('sns') ? `# SNS
+SNS_TOPIC_ARN=arn:aws:sns:${region}:${account}:${name}-topic
+` : ''}${services.includes('eventbridge') ? `# EventBridge
+EVENT_BUS_NAME=${name}-bus
+` : ''}${services.includes('firehose') ? `# Firehose
+FIREHOSE_STREAM=${name}-firehose
+` : ''}${services.includes('s3') ? `# S3
+S3_BUCKET=${name}-data
+` : ''}${services.includes('secrets') ? `# Secrets Manager (local ARN format)
+DB_SECRET_ARN=arn:aws:secretsmanager:${region}:${account}:secret:${name}-db-creds
+` : ''}
+# Application
+LOG_LEVEL=INFO
+`
+}
+
+function samTemplate(config) {
+  const name   = config.projectName
+  const region = config.awsRegion || 'us-east-1'
+  const services = config.awsServices || []
+  const hasDynamo = services.includes('dynamodb')
+  const hasSQS    = services.includes('sqs')
+
+  return `AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: ${name} — generated by Yooti
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 256
+    Runtime: python3.12
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        LOG_LEVEL: INFO
+        AWS_ACCOUNT_ID: !Ref AWS::AccountId
+${hasDynamo ? `        TABLE_NAME: !Ref MainTable` : ''}
+${hasSQS    ? `        QUEUE_URL: !Ref MainQueue` : ''}
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues: [dev, staging, prod]
+
+Resources:
+
+  # ── Lambda Functions ────────────────────────────────────────────────────────
+
+  CreateItemFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${name}-create-item-\${Environment}"
+      CodeUri: src/
+      Handler: handlers.create_item.handler
+      Events:
+        Api:
+          Type: Api
+          Properties:
+            Path: /items
+            Method: POST
+      Policies:
+${hasDynamo ? `        - DynamoDBCrudPolicy:
+            TableName: !Ref MainTable` : ''}
+${hasSQS    ? `        - SQSSendMessagePolicy:
+            QueueName: !GetAtt MainQueue.QueueName` : ''}
+
+${hasDynamo ? `
+  # ── DynamoDB ────────────────────────────────────────────────────────────────
+
+  MainTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "${name}-\${Environment}"
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      SSESpecification:
+        SSEEnabled: true
+` : ''}
+${hasSQS ? `
+  # ── SQS ─────────────────────────────────────────────────────────────────────
+
+  MainQueueDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${name}-dlq-\${Environment}"
+      MessageRetentionPeriod: 1209600  # 14 days
+
+  MainQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${name}-queue-\${Environment}"
+      VisibilityTimeout: 90
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt MainQueueDLQ.Arn
+        maxReceiveCount: 3
+` : ''}
+
+Outputs:
+  ApiEndpoint:
+    Description: API Gateway endpoint URL
+    Value: !Sub "https://\${ServerlessRestApi}.execute-api.${region}.amazonaws.com/Prod/"
+${hasDynamo ? `  TableName:
+    Value: !Ref MainTable` : ''}
+${hasSQS    ? `  QueueUrl:
+    Value: !Ref MainQueue` : ''}
+`
+}
+
+function generateTestEvents(write, config) {
+  const services = config.awsServices || []
+  const hasLambda = services.includes('lambda')
+  const hasSQS    = services.includes('sqs')
+
+  if (!hasLambda) return
+
+  write('events/api_post_valid.json', JSON.stringify({
+    httpMethod: 'POST',
+    path: '/items',
+    pathParameters: null,
+    queryStringParameters: null,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'test-item', value: 42 }),
+    isBase64Encoded: false,
+  }, null, 2))
+
+  write('events/api_post_invalid.json', JSON.stringify({
+    httpMethod: 'POST',
+    path: '/items',
+    pathParameters: null,
+    queryStringParameters: null,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+    isBase64Encoded: false,
+  }, null, 2))
+
+  write('events/api_get_by_id.json', JSON.stringify({
+    httpMethod: 'GET',
+    path: '/items/abc-123',
+    pathParameters: { id: 'abc-123' },
+    queryStringParameters: null,
+    headers: {},
+    body: null,
+    isBase64Encoded: false,
+  }, null, 2))
+
+  if (hasSQS) {
+    write('events/sqs_batch.json', JSON.stringify({
+      Records: [
+        {
+          messageId: 'msg-001',
+          receiptHandle: 'receipt-001',
+          body: JSON.stringify({ id: 'item-001', action: 'process' }),
+          attributes: { ApproximateReceiveCount: '1' },
+          messageAttributes: {},
+          md5OfBody: '',
+          eventSource: 'aws:sqs',
+          eventSourceARN: `arn:aws:sqs:us-east-1:000000000000:${config.projectName}-queue`,
+          awsRegion: config.awsRegion || 'us-east-1',
+        },
+        {
+          messageId: 'msg-002',
+          receiptHandle: 'receipt-002',
+          body: JSON.stringify({ id: 'item-002', action: 'process' }),
+          attributes: { ApproximateReceiveCount: '1' },
+          messageAttributes: {},
+          md5OfBody: '',
+          eventSource: 'aws:sqs',
+          eventSourceARN: `arn:aws:sqs:us-east-1:000000000000:${config.projectName}-queue`,
+          awsRegion: config.awsRegion || 'us-east-1',
+        },
+      ],
+    }, null, 2))
+  }
+}
+
+function awsLambdaStoryTemplate() {
+  return JSON.stringify({
+    type: 'aws-lambda',
+    description: 'AWS Lambda microservice — API Gateway + DynamoDB + optional SQS/SNS/EventBridge',
+    required_fields: ['story_id', 'title', 'api_endpoints', 'acceptance_criteria'],
+    acceptance_criteria_guidance: [
+      'AC-1: Happy path — valid input returns expected response (201/200)',
+      'AC-2: Validation error — missing/invalid fields return 400 with a message (no stack trace)',
+      'AC-3: Conflict/duplicate — same resource submitted twice returns 409',
+      'AC-4: AWS failure — DynamoDB/SQS unavailable returns 500 with no internal detail exposed',
+      'AC-5: Auth — unauthenticated request returns 401',
+    ].join('\n'),
+    definition_of_done: [
+      'All AC have passing unit tests using moto — no real AWS calls in any test',
+      'SQS handlers return batchItemFailures — never fail the whole batch',
+      'DynamoDB uses single table design — no Scan operations anywhere',
+      'Coverage on new code >= 90%',
+      'Security scan: 0 HIGH/CRITICAL',
+      'No credentials, ARNs, or table names hardcoded — all from os.environ',
+      'SAM template or CDK stack present and reviewed at Gate G2',
+    ],
+    constitutions_to_apply: ['python', 'aws', 'security', 'testing'],
+    layers: ['api', 'database'],
+    decomposition_hint: [
+      'T001 — DynamoDB schema + repository layer (moto tests only — no real AWS)',
+      'T002 — Lambda handler + service + validator (unit tests with moto)',
+      'T003 — SAM/CDK definition + test event files',
+    ].join('\n'),
+    estimated_complexity: 'M',
+  }, null, 2)
+}
+
+function buildLocalStackServices(awsServices = []) {
+  const serviceMap = {
+    lambda:      'lambda',
+    dynamodb:    'dynamodb',
+    sqs:         'sqs',
+    sns:         'sns',
+    eventbridge: 'events',
+    firehose:    'firehose',
+    s3:          's3',
+    secrets:     'secretsmanager',
+    fargate:     'ecs',
+  }
+  const defaults = ['s3', 'sqs', 'sns', 'dynamodb', 'lambda', 'events',
+                    'firehose', 'secretsmanager']
+  const selected = awsServices.map(s => serviceMap[s]).filter(Boolean)
+  const merged = [...new Set([...defaults, ...selected])]
+  return merged.join(',')
+}
+
 function yootiConfigTemplate(config) {
   const cfg = {
     project:          config.projectName,
@@ -4455,6 +5134,22 @@ function yootiConfigTemplate(config) {
     ci:               config.ci              || 'github-actions',
     deploy:           config.deploy          || 'docker',
     stack:            config.stack           || [],
+    include_aws:      config.includeAws      || false,
+    ...(config.includeAws ? {
+      aws: {
+        region:         config.awsRegion   || 'us-east-1',
+        services:       config.awsServices || [],
+        deploy:         config.awsDeploy   || 'sam',
+        localstack_url: 'http://localhost:4566',
+        resources: {
+          ...((config.awsServices || []).includes('dynamodb') ? { dynamodb_table: config.projectName } : {}),
+          ...((config.awsServices || []).includes('sqs') ? { sqs_queue: `${config.projectName}-queue`, sqs_dlq: `${config.projectName}-dlq` } : {}),
+          ...((config.awsServices || []).includes('sns') ? { sns_topic: `${config.projectName}-topic` } : {}),
+          ...((config.awsServices || []).includes('eventbridge') ? { event_bus: `${config.projectName}-bus` } : {}),
+          ...((config.awsServices || []).includes('s3') ? { s3_bucket: `${config.projectName}-data` } : {}),
+        },
+      },
+    } : {}),
     databases:        config.databases       || ['postgres', 'redis'],
     vector_store:     config.vectorStore     || 'none',
     item_prefix:      config.itemPrefix ?? 'STORY',

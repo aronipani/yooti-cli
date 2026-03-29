@@ -307,6 +307,9 @@ RI defaults are replaced with your team's tools via toolchain config.
 - [x] sprint:retro command
 - [x] sprint:report validates definition of done
 - [x] Code audit in Phase 5 against constitutions
+- [x] AWS services constitution — Lambda, DynamoDB, SQS, SNS,
+      EventBridge, Firehose, Fargate, API Gateway
+- [x] LocalStack in docker-compose for AWS integration testing
 - [x] Cross-platform: Mac, Linux, Windows
 
 ### Roadmap
