@@ -2571,6 +2571,7 @@ Blocks: T002
   if (config.ci === 'github-actions') {
     write('.github/workflows/unit-tests.yml', unitTestsCiYml(config));
     write('.github/workflows/security-scan.yml', securityCiYml(config));
+    write('.github/workflows/gate-g3.yml', gateG3CiYml(config));
 
     let ciServices = '';
     let ciEnv = '';
@@ -2851,6 +2852,7 @@ GO: deploy | NO-GO: hold
 `);
 
   write('docs/PROMPTS.md', promptsGuideTemplate(config));
+  write('docs/CUSTOMISING.md', generateCustomisingMd(config));
 
   // ── Verify critical files exist ──
   const criticalFiles = [];
@@ -3571,6 +3573,7 @@ function nodeApiPackageJson(config) {
 // ── Decomposition examples ──
 
 function goodDecompositionExample(config) {
+  const itemPrefix = config.itemPrefix ?? 'STORY'
   return `# Good task decomposition — reference example
 
 ## Story
@@ -3651,6 +3654,7 @@ ${itemPrefix ? itemPrefix + '-003' : '003'}-T004 — Registration frontend form
 }
 
 function badDecompositionExample(config) {
+  const itemPrefix = config.itemPrefix ?? 'STORY'
   return `# Bad task decomposition — what NOT to do
 
 ## Story
@@ -3918,6 +3922,10 @@ function envExampleTemplate(config) {
 function promptsGuideTemplate(config) {
   const agent = config.agent === 'codex' ? 'Codex CLI' : 'Claude Code'
   const t3 = '```'
+  const itemPrefix = config.itemPrefix ?? 'STORY'
+  const itemTag = itemPrefix ? `${itemPrefix}-ID` : 'ID'
+  const item001 = itemPrefix ? `${itemPrefix}-001` : '001'
+  const itemNNN = itemPrefix ? `${itemPrefix}-NNN` : 'NNN'
   return `# Yooti — Prompt Guide
 # The exact prompt to use at every pipeline stage
 # Agent: ${agent} · Project: ${config.projectName}
@@ -4117,9 +4125,279 @@ ${t3}
 `
 }
 
+// ── Gate G3 CI workflow ──
+
+function gateG3CiYml(config) {
+  const prefix = config.itemPrefix || 'STORY'
+  const pattern = prefix ? `${prefix}-[0-9]+` : `[0-9]+`
+
+  return `name: Gate G3 — Evidence Check
+on:
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  evidence-check:
+    name: Verify evidence package exists
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract item ID from branch name
+        id: story
+        run: |
+          BRANCH="\${{ github.head_ref }}"
+          ITEM_ID=$(echo "$BRANCH" | grep -oP '${pattern}' | head -1)
+          if [ -z "$ITEM_ID" ]; then
+            echo "::warning::Could not extract item ID from branch: $BRANCH"
+            echo "story_id=" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          echo "story_id=$ITEM_ID" >> $GITHUB_OUTPUT
+
+      - name: Check evidence package
+        if: steps.story.outputs.story_id != ''
+        run: |
+          SID="\${{ steps.story.outputs.story_id }}"
+          DIR=".agent/evidence/$SID"
+          MISSING=0
+
+          check_file() {
+            if [ ! -f "$DIR/$1" ]; then
+              echo "::error::Missing: $DIR/$1"
+              MISSING=$((MISSING + 1))
+            else
+              echo "✓ $DIR/$1"
+            fi
+          }
+
+          check_file "test-results.json"
+          check_file "coverage-summary.json"
+          check_file "regression-diff.json"
+          check_file "security-scan.json"
+          check_file "code-audit.md"
+          check_file "pr-body.md"
+
+          if [ $MISSING -gt 0 ]; then
+            echo "::error::$MISSING evidence file(s) missing for $SID"
+            echo "Run Phase 5 to generate the evidence package."
+            exit 1
+          fi
+
+          echo "All evidence files present for $SID"
+
+      - name: Validate test results
+        if: steps.story.outputs.story_id != ''
+        run: |
+          SID="\${{ steps.story.outputs.story_id }}"
+          FILE=".agent/evidence/$SID/test-results.json"
+          if [ -f "$FILE" ]; then
+            UNIT_FAILED=$(python3 -c "import json; d=json.load(open('$FILE')); print(d.get('unit',{}).get('failed',0))")
+            INT_FAILED=$(python3 -c "import json; d=json.load(open('$FILE')); print(d.get('integration',{}).get('failed',0))")
+            if [ "$UNIT_FAILED" != "0" ] || [ "$INT_FAILED" != "0" ]; then
+              echo "::error::Test failures: unit=$UNIT_FAILED integration=$INT_FAILED"
+              exit 1
+            fi
+            echo "✓ All tests passing"
+          fi
+
+      - name: Validate coverage
+        if: steps.story.outputs.story_id != ''
+        run: |
+          SID="\${{ steps.story.outputs.story_id }}"
+          FILE=".agent/evidence/$SID/coverage-summary.json"
+          if [ -f "$FILE" ]; then
+            OVERALL=$(python3 -c "import json; print(json.load(open('$FILE')).get('overall',0))")
+            NEW_CODE=$(python3 -c "import json; print(json.load(open('$FILE')).get('new_code',0))")
+            python3 -c "
+import sys
+overall = float('$OVERALL')
+new_code = float('$NEW_CODE')
+if overall < 80:
+    print(f'::error::Overall coverage {overall}% < 80%')
+    sys.exit(1)
+if new_code < 90:
+    print(f'::error::New code coverage {new_code}% < 90%')
+    sys.exit(1)
+print(f'✓ Coverage: overall={overall}% new_code={new_code}%')
+"
+          fi
+
+      - name: Check code audit
+        if: steps.story.outputs.story_id != ''
+        run: |
+          SID="\${{ steps.story.outputs.story_id }}"
+          FILE=".agent/evidence/$SID/code-audit.md"
+          if [ -f "$FILE" ]; then
+            if grep -q "## Violations found" "$FILE" && ! grep -q "No violations found" "$FILE"; then
+              echo "::error::Code audit violations found — see $FILE"
+              exit 1
+            fi
+            echo "✓ Code audit clean"
+          fi
+`
+}
+
+// ── CUSTOMISING.md template ──
+
+function generateCustomisingMd(config) {
+  return `# Customising Your Pipeline — ${config.projectName}
+
+This guide shows how to wire your existing tools into the Yooti pipeline.
+The framework is language-agnostic. The generated scaffold ships one
+opinionated stack. This document is for teams who use something else.
+
+---
+
+## The mental model
+
+Yooti's quality gates expect certain outputs. It does not care how those
+outputs are produced — only that they are produced in the expected format
+at the expected time.
+
+    GATE G4 expects:    A passing test suite
+                        A coverage report
+                        A security scan result
+                        A regression diff vs the baseline
+                        A code audit vs your constitutions
+
+    HOW YOU PRODUCE THEM is up to you. The generated scaffold
+    uses pytest, Vitest, Snyk, and Semgrep. Your team uses whatever
+    tools your stack requires.
+
+---
+
+## Step 1 — Tell Yooti about your toolchain
+
+Open \`yooti.config.json\` and update the toolchain section for your layers:
+
+    {
+      "toolchain": {
+        "api": {
+          "runtime":          "go",
+          "lint_command":     "golangci-lint run ./...",
+          "type_check":       "go vet ./...",
+          "test_command":     "go test ./... -v",
+          "test_unit":        "go test ./... -run Unit",
+          "test_integration": "go test ./... -run Integration",
+          "test_coverage":    "go test ./... -cover -coverprofile=coverage.out",
+          "mutation":         "go-mutesting ./...",
+          "coverage_threshold": 80,
+          "new_code_threshold": 90
+        }
+      }
+    }
+
+The agent reads these commands from yooti.config.json and runs them during
+Phase 4 (build loop) and Phase 5 (evidence generation).
+
+---
+
+## Step 2 — Write constitutions for your stack
+
+Delete the constitution stubs that don't apply and write your own:
+
+    rm .claude/constitutions/python.md     # if you are not using Python
+    rm .claude/constitutions/react.md      # if you are not using React
+
+Write your stack's constitution:
+
+    # .claude/constitutions/go.md
+    ## Patterns
+    - Errors are values — always check, never ignore with _
+    - No global state — pass dependencies explicitly
+    - Interfaces defined at the point of use
+    - Table-driven tests for all pure functions
+
+    # .claude/constitutions/java.md
+    ## Patterns
+    - Constructor injection only — never @Autowired on fields
+    - Every @Service has a corresponding interface
+    - No business logic in @Controller classes
+
+Reference them in .claude/CLAUDE.md:
+
+    Go code:         .claude/constitutions/go.md
+    Java + Spring:   .claude/constitutions/java.md
+
+---
+
+## Step 3 — Map your tools to the quality gates
+
+| Requirement | Default | Go | Java | Ruby | Rust |
+|-------------|---------|-----|------|------|------|
+| Lint | ruff / ESLint | golangci-lint | checkstyle | rubocop | clippy |
+| Type check | mypy / tsc | go vet | javac -Xlint | sorbet | rustc |
+| Unit tests | pytest / vitest | go test -run Unit | mvn test | rspec --tag unit | cargo test |
+| Integration | pytest -m integration | go test -run Integration | mvn verify | rspec --tag integration | cargo test --test integration |
+| Coverage | coverage.py / istanbul | go test -cover | jacoco | simplecov | cargo tarpaulin |
+| Security | bandit / snyk | govulncheck | OWASP dep-check | bundler-audit | cargo audit |
+| Mutation | mutmut / stryker | go-mutesting | pitest | mutant | cargo-mutants |
+
+---
+
+## Step 4 — Configure the evidence package format
+
+Phase 5 generates evidence files that Gate G4 reads. The format is
+JSON — your tools need to output data that the agent can translate
+into the expected format.
+
+The agent handles this translation automatically if your toolchain
+commands are in yooti.config.json. For custom output formats, add
+a note to CLAUDE.md:
+
+    ## Coverage output format — Go
+    The coverage command produces: go test -cover -coverprofile=coverage.out
+    Parse with: go tool cover -func=coverage.out
+    Extract the total line from the output and write to:
+    .agent/evidence/[ID]/coverage-summary.json
+
+---
+
+## Step 5 — Update the CI workflows
+
+The generated GitHub Actions workflows use scaffold defaults. Update them
+to use your tools:
+
+    # .github/workflows/unit-tests.yml
+    - name: Run tests (Go)
+      run: go test ./... -v -cover
+      working-directory: ./your-service
+
+Or if you already have CI, add the Yooti gate checks alongside your
+existing jobs:
+
+    - name: Check G4 evidence exists
+      run: |
+        STORY_ID=$(git log --format=%s HEAD~1 | grep -oP '[A-Z]+-\\d+' | head -1)
+        if [ ! -f ".agent/evidence/\${STORY_ID}/test-results.json" ]; then
+          echo "G4 evidence package missing for \${STORY_ID}"
+          exit 1
+        fi
+
+---
+
+## Step 6 — Customise the work item prefix
+
+By default, stories use the STORY- prefix. Change it in yooti.config.json:
+
+    {
+      "item_prefix": "FEAT"
+    }
+
+Or set it during init:
+
+    yooti init my-project --item-prefix FEAT
+
+All CLI commands, validation, and CI workflows will use the configured prefix.
+`
+}
+
 // ── AGENTS.md template (for Codex projects) ──
 
 function agentsMdTemplate(config) {
+  const itemPrefix = config.itemPrefix ?? 'STORY'
+  const itemTag = itemPrefix ? `${itemPrefix}-ID` : 'ID'
   return `# AGENTS.md — ${config.projectName}
 # This file is read by Codex CLI before every task
 

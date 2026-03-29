@@ -299,4 +299,60 @@ program
     await smStandup(options);
   });
 
+program
+  .command('help:all')
+  .description('Show all commands grouped by role')
+  .action(() => {
+    const d = chalk.dim;
+    const w = chalk.white;
+    const c = chalk.cyan;
+
+    console.log(c('  All commands — grouped by role\n'));
+
+    console.log(w('  PM / Product'));
+    console.log(d('    yooti story:add              Add and validate a new story'));
+    console.log(d('    yooti story:import --file F   Import stories from JSON'));
+    console.log(d('    yooti story:sample            Import built-in sample stories'));
+    console.log(d('    yooti story:approve [id]      Gate G1 — PM signs off stories'));
+    console.log('');
+
+    console.log(w('  Architect'));
+    console.log(d('    yooti plan:review [id]       Gate G2 — review all task plans'));
+    console.log(d('    yooti plan:approve <id>      Sign off Gate G2'));
+    console.log(d('    yooti plan:amend <task-id>   Amend a plan — add scope, steps, annotations'));
+    console.log(d('    yooti configure              Change pipeline adoption stage'));
+    console.log('');
+
+    console.log(w('  Developer'));
+    console.log(d('    yooti init [name]            Scaffold a new project'));
+    console.log(d('    yooti sprint:start           Start a sprint — validate + baseline'));
+    console.log(d('    yooti task:add [id]          Add a task to a story'));
+    console.log(d('    yooti task:list [id]         List tasks and status'));
+    console.log(d('    yooti context:add <id>       Attach context to a story'));
+    console.log(d('    yooti context:list <id>      List context for a story'));
+    console.log(d('    yooti correct:inject <id>    Inject a correction mid-generation'));
+    console.log(d('    yooti preflight              Run pre-flight validation'));
+    console.log(d('    yooti snapshot [tag]         Capture regression baseline'));
+    console.log(d('    yooti doctor                 Check environment health'));
+    console.log('');
+
+    console.log(w('  QA / SDET'));
+    console.log(d('    yooti test:require [id]      Add a test requirement'));
+    console.log(d('    yooti qa:plan [id]           Create a QA test plan'));
+    console.log(d('    yooti qa:review [id]         Gate G4 — review evidence package'));
+    console.log('');
+
+    console.log(w('  Scrum Master'));
+    console.log(d('    yooti sm:standup             Daily standup summary'));
+    console.log(d('    yooti sprint:report          Sprint audit summary'));
+    console.log(d('    yooti sprint:retro           Sprint retrospective'));
+    console.log('');
+
+    console.log(w('  All roles'));
+    console.log(d('    yooti audit <id>             Full audit trail for a story'));
+    console.log(d('    yooti log:event [id]         Manually log an event'));
+    console.log(d('    yooti help:all               This command'));
+    console.log('');
+  });
+
 program.parse();
