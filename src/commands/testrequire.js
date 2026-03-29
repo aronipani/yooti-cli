@@ -2,12 +2,13 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { writeFileSync, mkdirSync, existsSync } from 'fs'
+import { validateId, placeholderExample } from '../utils/itemId.js'
 
 export async function testRequire(storyId) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
-      type: 'input', name: 'storyId', message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      type: 'input', name: 'storyId', message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }])
     storyId = ans.storyId
   }

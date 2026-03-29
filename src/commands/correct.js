@@ -2,10 +2,11 @@
 import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { writeFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs'
+import { placeholderExample } from '../utils/itemId.js'
 
 export async function correctInject(taskId) {
   if (!taskId) {
-    console.log(chalk.red('\n  ✗ Task ID required. Example: yooti correct:inject STORY-001-T001\n'))
+    console.log(chalk.red(`\n  ✗ Task ID required. Example: yooti correct:inject ${placeholderExample()}-T001\n`))
     process.exit(1)
   }
 

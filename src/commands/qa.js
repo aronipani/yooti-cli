@@ -2,14 +2,15 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs'
 import { evidencePackageComplete } from './sprint.js'
+import { validateId, placeholderExample } from '../utils/itemId.js'
 
 export async function qaPlan(storyId) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input',
       name: 'storyId',
-      message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }])
     storyId = ans.storyId
   }
@@ -165,8 +166,8 @@ export async function qaReview(storyId) {
     const ans = await inquirer.prompt([{
       type: 'input',
       name: 'storyId',
-      message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }])
     storyId = ans.storyId
   }
@@ -260,6 +261,17 @@ export async function qaReview(storyId) {
     hardGate('Zero accessibility violations',
       a11y.violations === 0,
       `${a11y.violations} violations`)
+  }
+
+  const auditPath = `${evidenceDir}/code-audit.md`
+  if (existsSync(auditPath)) {
+    const auditContent = readFileSync(auditPath, 'utf8')
+    const hasViolations = auditContent.includes('## Violations found') &&
+      !auditContent.includes('No violations found')
+    hardGate('Code audit — 0 violations', !hasViolations,
+      hasViolations ? 'violations found — see code-audit.md' : 'clean')
+  } else {
+    hardGate('Code audit file exists', false, 'code-audit.md missing from evidence')
   }
 
   if (mutation) {

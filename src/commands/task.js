@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { logAgentAction } from '../audit/logger.js'
+import { validateId, placeholderExample } from '../utils/itemId.js'
 
 export async function taskAdd(storyId, cliOptions = {}) {
   if (!existsSync('yooti.config.json')) {
@@ -14,8 +15,8 @@ export async function taskAdd(storyId, cliOptions = {}) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input', name: 'storyId',
-      message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d{3,}$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }])
     storyId = ans.storyId
   }

@@ -5,6 +5,7 @@ import { join } from 'path';
 import ora from 'ora';
 import { initLog, logPhaseStart, logAgentAction } from '../audit/logger.js';
 import { listSampleApps, getSampleStories, SAMPLE_APPS } from '../samples/index.js';
+import { validateId, placeholderExample, getPrefix, formatId } from '../utils/itemId.js';
 
 export async function storyAdd() {
   console.log(chalk.cyan('\n◆ yooti story:add — Requirements Ingestion Agent\n'));
@@ -18,9 +19,9 @@ export async function storyAdd() {
     {
       type: 'input',
       name: 'storyId',
-      message: 'Story ID',
-      default: 'STORY-001',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN',
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      default: placeholderExample(),
+      validate: v => validateId(v) === true || validateId(v),
     },
     {
       type: 'input',
@@ -363,8 +364,8 @@ export async function storyApprove(storyId, options = {}) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input', name: 'storyId',
-      message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }]);
     storyId = ans.storyId;
   }

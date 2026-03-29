@@ -14,6 +14,8 @@ import { postgresqlConstitution } from './templates/constitutions/postgresql-con
 import { securityConstitution } from './templates/constitutions/security-constitution.js';
 import { testingConstitution } from './templates/constitutions/testing-constitution.js';
 import { mongodbConstitution } from './templates/constitutions/mongodb-constitution.js';
+import { configConstitution } from './templates/constitutions/config-constitution.js';
+import { dockerConstitution } from './templates/constitutions/docker-constitution.js';
 import {
   featureStoryTemplate, bugfixStoryTemplate, refactorStoryTemplate,
   agentStoryTemplate, securityPatchTemplate, apiContractTemplate
@@ -964,6 +966,10 @@ export async function generateFiles(config) {
   const hasNode = config.stack.includes('node');
   const hasReact = config.stack.includes('react') || config.stack.includes('nextjs');
   const hasPython = config.stack.includes('python') || isAgent;
+  const itemPrefix = config.itemPrefix ?? 'STORY';
+  const itemTag = itemPrefix ? `${itemPrefix}-ID` : 'ID';
+  const itemNNN = itemPrefix ? `${itemPrefix}-NNN` : 'NNN';
+  const item001 = itemPrefix ? `${itemPrefix}-001` : '001';
 
   const stageName = (stage) => {
     const names = {
@@ -1145,7 +1151,7 @@ Phase 2 produces PLAN FILES ONLY.
 No code. No tests. No implementation. No imports.
 
 For each story in scope:
-  1. Read .agent/requirements/[STORY-ID]-validated.json
+  1. Read .agent/requirements/[${itemTag}]-validated.json
   2. Apply the decomposition rules above
   3. Write one .plan.md file per task to .agent/plans/
   4. Mark each plan Status: PENDING
@@ -1158,7 +1164,7 @@ Phase 2 is complete when:
   No code files have been created or modified
 
 Phase 4 starts ONLY after:
-  Gate G2 is signed — .agent/gates/[STORY-ID]-G2-approved.md exists
+  Gate G2 is signed — .agent/gates/[${itemTag}]-G2-approved.md exists
   Architect has reviewed and approved the plans
 
 If you find yourself writing code during Phase 2 — STOP.
@@ -1171,10 +1177,10 @@ If you find yourself writing code during Phase 2 — STOP.
 Phase 3 runs automatically before Phase 4.
 It does not require human input.
 
-  1. Create feature branch: git checkout -b feature/[STORY-ID]
+  1. Create feature branch: git checkout -b feature/[${itemTag}]
   2. Run preflight checks: node pipeline/scripts/preflight.js
-  3. Confirm .agent/gates/[STORY-ID]-G2-approved.md exists
-  4. Confirm .agent/plans/[STORY-ID]-*.plan.md files exist
+  3. Confirm .agent/gates/[${itemTag}]-G2-approved.md exists
+  4. Confirm .agent/plans/[${itemTag}]-*.plan.md files exist
   5. Proceed to Phase 4
 
 If preflight fails: write escalation and stop.
@@ -1228,34 +1234,34 @@ Steps in order:
   2. Run coverage report — save to coverage.json
   3. Run regression diff: python tests/regression/comparator/diff.py
   4. Run security scan if available (snyk, semgrep)
-  5. Create .agent/evidence/[STORY-ID]/ folder
+  5. Create .agent/evidence/[${itemTag}]/ folder
   6. Write these evidence files:
 
      test-results.json
-     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+     { "story_id": "[${itemTag}]", "generated_at": "[ISO]",
        "unit": { "total": N, "passed": N, "failed": 0 },
        "integration": { "total": N, "passed": N, "failed": 0 } }
 
      coverage-summary.json
-     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+     { "story_id": "[${itemTag}]", "generated_at": "[ISO]",
        "overall": N.N, "new_code": N.N, "files": [] }
 
      regression-diff.json
-     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+     { "story_id": "[${itemTag}]", "generated_at": "[ISO]",
        "baseline_sprint": "sprint-N", "newly_failing": [],
        "newly_passing": [], "total_tests_before": N, "total_tests_after": N }
 
      security-scan.json
-     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+     { "story_id": "[${itemTag}]", "generated_at": "[ISO]",
        "snyk": { "critical": 0, "high": 0, "medium": 0 },
        "semgrep": { "findings": 0 } }
 
      accessibility.json (frontend stories only)
-     { "story_id": "[STORY-ID]", "generated_at": "[ISO]",
+     { "story_id": "[${itemTag}]", "generated_at": "[ISO]",
        "violations": 0, "passes": N, "viewports_tested": [375, 768, 1280] }
 
      pr-body.md
-     ## [STORY-ID] — [story title]
+     ## [${itemTag}] — [story title]
      ### Acceptance criteria coverage
      | AC | Status | Test |
      |----|--------|------|
@@ -1271,14 +1277,70 @@ Steps in order:
      ### Deliberate decisions
      List any non-obvious choices made.
 
-  7. Hard blocks — do NOT open PR if any are true:
+  7. Self-audit before PR (mandatory)
+
+     Before writing the PR body, run this audit on every file you changed.
+     Write the results to .agent/evidence/[${itemTag}]/code-audit.md
+
+     For each file in your task scope check:
+
+       SECURITY
+       □ No hardcoded secrets, passwords, or API keys
+       □ All SQL uses parameterised queries — no string concatenation
+       □ Auth middleware present on every protected endpoint
+       □ No sensitive data in log output
+       □ User input validated before use
+       □ Error responses never expose stack traces or internal paths
+
+       CODE QUALITY
+       □ Every function has type annotations (Python) or TypeScript types
+       □ No bare except: or empty catch blocks
+       □ No TODO or FIXME comments in production code
+       □ No commented-out code blocks
+       □ No print() or console.log() debug statements
+       □ Every public function has a docstring or JSDoc comment
+
+       TESTS
+       □ Test file exists for every new source file
+       □ Tests test behaviour not implementation
+       □ No test calls a real external service (all mocked)
+       □ axe-core test present in every React component test
+
+       CONSTITUTION COMPLIANCE
+       □ config.md rules followed for any config files changed
+       □ docker.md rules followed if Dockerfile or compose changed
+       □ Ports in Dockerfile match ports in .env.example
+       □ No hardcoded URLs — all from environment variables
+
+     Write the audit report in this format:
+
+       # Code Audit — [${itemTag}]
+       Date: [ISO timestamp]
+       Files audited: N
+
+       ## Violations found
+       [list any violations with file and line number]
+       OR: No violations found.
+
+       ## Checks passed
+       [count of checks that passed]
+
+     If violations are found:
+       Fix each violation before continuing.
+       Do NOT open a PR with known violations.
+       Update the audit report after fixing.
+
+     Add the audit report to the PR body under a ## Code audit section.
+
+  8. Hard blocks — do NOT open PR if any are true:
      test-results.json shows failed > 0
      coverage-summary.json shows overall < 80
      coverage-summary.json shows new_code < 90
      regression-diff.json shows newly_failing is not empty
      security-scan.json shows snyk.critical > 0 or snyk.high > 0
+     code-audit.md contains violations
 
-  8. Open the PR only after all evidence files exist
+  9. Open the PR only after all evidence files exist
      and all hard blocks are clear
 
 ## Gate G3 — PR review
@@ -1286,22 +1348,71 @@ Steps in order:
 Gate G3 happens entirely in GitHub.
 The developer reviews, approves, and merges the PR in GitHub.
 No CLI command is required at Gate G3.
-After the PR is merged QA proceeds with: yooti qa:review [STORY-ID]
+After the PR is merged QA proceeds with: yooti qa:review [${itemTag}]
 
 Do NOT wait for a CLI command at Gate G3.
 Do NOT re-open the PR after it is merged.
 Do NOT start the next story until G3 is complete.
 
+## Constitution enforcement — mandatory before writing any file
+
+Before writing ANY file in a task, state out loud which
+constitutions apply and confirm you have read them.
+
+CHECKLIST — run this before every task:
+
+  Writing a Python file?
+    → Read .claude/constitutions/python.md NOW
+    → Read .claude/constitutions/security.md NOW
+    → Read .claude/constitutions/testing.md NOW
+
+  Writing a React/TypeScript file?
+    → Read .claude/constitutions/react.md NOW (components)
+    → Read .claude/constitutions/typescript.md NOW (non-component)
+    → Read .claude/constitutions/security.md NOW
+    → Read .claude/constitutions/testing.md NOW
+
+  Writing a database migration or query?
+    → Read .claude/constitutions/postgresql.md NOW
+    → Read .claude/constitutions/security.md NOW
+
+  Writing a LangGraph agent?
+    → Read .claude/constitutions/langgraph.md NOW
+    → Read .claude/constitutions/python.md NOW
+    → Read .claude/constitutions/testing.md NOW
+
+  Writing any configuration file (.env, docker-compose, pyproject.toml)?
+    → Read .claude/constitutions/config.md NOW
+    → Read .claude/constitutions/docker.md NOW (if Docker file)
+
+  Writing any test file?
+    → Read .claude/constitutions/testing.md NOW
+
+SELF-AUDIT — before marking any task COMPLETE:
+  □ Every function has type annotations (Python) or types (TypeScript)
+  □ No secrets or hardcoded values — all from environment variables
+  □ Every new dependency is in requirements.txt or package.json
+  □ No bare except/empty catch blocks
+  □ All error messages are user-friendly — no stack traces exposed
+  □ Every public function has a docstring or JSDoc comment
+  □ SQL queries use parameterised inputs — never string concatenation
+  □ Auth checks present on every protected endpoint
+  □ Test file exists for every new source file
+  □ axe-core test present in every React component test
+
+If any box cannot be checked: fix it before marking COMPLETE.
+Do not mark a task COMPLETE with a known violation.
+
 ## Before every task — read in this order
 
-1. .agent/requirements/[STORY-ID]-validated.json
+1. .agent/requirements/[${itemTag}]-validated.json
    The spec. Every AC must have a test. Non-negotiable.
 
-2. .agent/plans/[STORY-ID]-[TASK-ID].plan.md
+2. .agent/plans/[${itemTag}]-[TASK-ID].plan.md
    Your task. Scope is law. Read the Role annotations section.
    Check status — only proceed if PENDING or IN_PROGRESS.
 
-3. .agent/context/[STORY-ID]/ (all files if folder exists)
+3. .agent/context/[${itemTag}]/ (all files if folder exists)
    URL files: fetch the URL before proceeding
    File files: read the file at the path
    Constraint files: treat as absolute rules
@@ -1315,7 +1426,7 @@ Do NOT start the next story until G3 is complete.
    Additional test scenarios QA requires.
    All P0 requirements must pass before PR opens.
 
-6. .agent/gates/[STORY-ID]-G2-approved.md
+6. .agent/gates/[${itemTag}]-G2-approved.md
    MUST EXIST before you write any code.
    If missing: write escalation and stop.
 
@@ -1330,7 +1441,7 @@ Within a story: always T001 → T002 → T003 in order.
   Never start T003 before T002 is COMPLETE.
 
 Across stories: respect cross-story dependencies.
-  The plan file says "Depends on: STORY-NNN-TMMM"
+  The plan file says "Depends on: ${itemNNN}-TMMM"
   Do not start a task if its dependency is not COMPLETE.
 
 ## Scope rules — these are absolute
@@ -1357,7 +1468,7 @@ When in doubt: escalate and stop.
 
 ## Audit logging — required for every action
 
-Log every significant action to .agent/logs/[STORY-ID].log.json.
+Log every significant action to .agent/logs/[${itemTag}].log.json.
 
 Log these events:
 - Every phase transition              → PHASE_START
@@ -1380,6 +1491,9 @@ ${hasReact ? `
 React components:             .claude/constitutions/react.md` : ''}
 ${config.hasPostgres ? `
 Database queries or schemas:  .claude/constitutions/postgresql.md` : ''}
+
+Configuration files (.env, pyproject.toml, vitest.config): .claude/constitutions/config.md
+Docker files (Dockerfile, docker-compose.yml):             .claude/constitutions/docker.md
 
 Any code in any layer:        .claude/constitutions/security.md
 Any test in any layer:        .claude/constitutions/testing.md
@@ -1489,14 +1603,33 @@ ${stageHumanDoes(config.stage)}
 STOP after: PR body and evidence package generated
 Human takes over: PR review (read, edit, approve/reject), ALL deployments
 KEY POINT: Human may edit code directly in the feature branch before approving
-`);
+${config.agent === 'codex' || config.agent === 'both' ? `
+## Using Codex CLI
+
+This project supports Codex CLI as the code generation agent.
+Codex reads the same CLAUDE.md and constitution files.
+
+Key differences when using Codex:
+  - Codex uses AGENTS.md in addition to CLAUDE.md
+  - Create .codex/ folder with AGENTS.md pointing to this CLAUDE.md
+  - Codex does not automatically read .claude/ — reference explicitly
+  - The pipeline, gates, and evidence package are identical
+
+Codex prompt format:
+  "Read AGENTS.md and CLAUDE.md. Proceed to Phase 2 for ${itemNNN}."
+
+AGENTS.md should contain:
+  Reference to this CLAUDE.md as the primary context file
+  Explicit instruction to read .claude/constitutions/ before coding
+  Same gate and evidence requirements as Claude Code
+` : ''}`);
 
   // ── .claude/agents/ ──
   write('.claude/agents/requirements.md', `# Requirements Ingestion Agent
 Parse raw user stories into validated_requirement.json.
 Flag ambiguities: BLOCKER (hold), WARNING (proceed with note), NOTE (log only).
 Structure every AC as Given/When/Then with testable: true/false.
-Write to: .agent/requirements/STORY-NNN-validated.json
+Write to: .agent/requirements/${itemNNN}-validated.json
 Validate against: pipeline/schemas/validated_requirement.schema.json
 `);
 
@@ -1517,13 +1650,13 @@ Validate against: pipeline/schemas/validated_requirement.schema.json
   6. All green: git commit
 
 ## Commit format
-feat(STORY-NNN): short description
+feat(${itemNNN}): short description
 - what changed and why
-Relates-to: STORY-NNN | Task: T-00N | Agent: CodeGenAgent | Iteration: N
+Relates-to: ${itemNNN} | Task: T-00N | Agent: CodeGenAgent | Iteration: N
 
 ## SCOPE_ERROR protocol
 If you need a file NOT in .plan scope:
-  STOP. Write .agent/escalations/STORY-NNN-scope.md. Do not proceed.
+  STOP. Write .agent/escalations/${itemNNN}-scope.md. Do not proceed.
 `);
 
   write('.claude/agents/testgen.md', `# Test Generation Agent — TDD Mandate
@@ -1577,7 +1710,7 @@ Never write implementation before tests exist.
 2. Classify using table above
 3. Apply minimum fix targeting the root cause only
 4. Restart from Step 1 of generation loop
-5. Log each attempt in .agent/evidence/STORY-NNN/iteration-log.json
+5. Log each attempt in .agent/evidence/${itemNNN}/iteration-log.json
 `);
 
   write('.claude/agents/deploy.md', `# Deploy Agent
@@ -1586,7 +1719,7 @@ Never write implementation before tests exist.
 ## Staging (automatic after G4)
 1. docker compose -f docker-compose.staging.yml up -d
 2. Wait 30s, run smoke tests
-3. Generate .agent/evidence/STORY-NNN/staging-health.json
+3. Generate .agent/evidence/${itemNNN}/staging-health.json
 4. Notify Release Manager for G5 review
 
 ## Production (after G5 approval — requires --confirm)
@@ -1604,7 +1737,7 @@ The .plan.md file is the contract. Files in Scope = the ONLY files you may touch
 ## SCOPE_ERROR protocol
 If you need to touch a file NOT in your .plan:
   1. STOP immediately — do not make the change
-  2. Write: .agent/escalations/STORY-NNN-scope.md
+  2. Write: .agent/escalations/${itemNNN}-scope.md
      - Which file, why you need it, impact, recommendation
   3. Wait for developer to amend the .plan
   4. Do not proceed
@@ -1666,7 +1799,7 @@ You are a surgeon, not an architect.
 Search before creating: does this utility/pattern already exist?
 
 ## Found a bug out of scope?
-Do NOT fix it. Write .agent/tech-debt/STORY-NNN-bug.md and move on.
+Do NOT fix it. Write .agent/tech-debt/${itemNNN}-bug.md and move on.
 `);
 
   // ── Pipeline schemas ──
@@ -1676,7 +1809,7 @@ Do NOT fix it. Write .agent/tech-debt/STORY-NNN-bug.md and move on.
     "type": "object",
     "required": ["story_id", "title", "type", "acceptance_criteria", "definition_of_done"],
     "properties": {
-      "story_id": { "type": "string", "pattern": "^STORY-[0-9]+" },
+      "story_id": { "type": "string", "pattern": itemPrefix ? `^${itemPrefix}-[0-9]+` : "^[0-9]+" },
       "title": { "type": "string", "minLength": 5 },
       "type": { "type": "string", "enum": ["feature", "bugfix", "refactor", "chore"] },
       "priority": { "type": "string", "enum": ["P0", "P1", "P2", "P3"] },
@@ -1707,6 +1840,129 @@ Do NOT fix it. Write .agent/tech-debt/STORY-NNN-bug.md and move on.
     '',
     "import { existsSync, readFileSync } from 'fs'",
     "import { execSync } from 'child_process'",
+    '',
+    '// ── Prerequisites — tools required before the pipeline can run ──',
+    '',
+    `const config = existsSync('yooti.config.json')`,
+    `  ? JSON.parse(readFileSync('yooti.config.json', 'utf8'))`,
+    '  : {}',
+    '',
+    'const prereqs = [',
+    '  {',
+    "    name:    'Git',",
+    "    command: 'git --version',",
+    '    install: {',
+    "      darwin:  'brew install git',",
+    "      win32:   'winget install Git.Git',",
+    "      linux:   'sudo apt-get install git',",
+    '    },',
+    '    required: true,',
+    '  },',
+    '  {',
+    "    name:    'GitHub CLI (gh)',",
+    "    command: 'gh --version',",
+    '    install: {',
+    "      darwin:  'brew install gh',",
+    "      win32:   'winget install GitHub.cli',",
+    "      linux:   'sudo apt-get install gh',",
+    '    },',
+    '    required: false,',
+    "    reason:   'Required for automatic PR creation in Phase 6',",
+    '  },',
+    '  {',
+    "    name:    'Node.js >= 20',",
+    "    command: 'node --version',",
+    "    versionCheck: v => parseInt(v.replace('v','').split('.')[0]) >= 20,",
+    '    install: {',
+    "      darwin:  'brew install node@20',",
+    "      win32:   'winget install OpenJS.NodeJS.LTS',",
+    "      linux:   'nvm install 20',",
+    '    },',
+    '    required: true,',
+    '  },',
+    '  {',
+    "    name:    'Python >= 3.12',",
+    "    command: process.platform === 'win32'",
+    "      ? 'python --version'",
+    "      : 'python3 --version 2>/dev/null || python --version',",
+    '    versionCheck: v => {',
+    "      const m = v.match(/(\\d+)\\.(\\d+)/)",
+    '      return m && (parseInt(m[1]) > 3 || (parseInt(m[1]) === 3 && parseInt(m[2]) >= 12))',
+    '    },',
+    '    install: {',
+    "      darwin:  'brew install python@3.12',",
+    "      win32:   'winget install Python.Python.3.12',",
+    "      linux:   'sudo apt-get install python3.12',",
+    '    },',
+    `    required: config.stack?.includes('python') || config.projectType !== 'web',`,
+    '  },',
+    '  {',
+    "    name:    'Docker Desktop',",
+    "    command: 'docker --version',",
+    '    install: {',
+    "      darwin:  'https://docs.docker.com/desktop/install/mac-install/',",
+    "      win32:   'https://docs.docker.com/desktop/install/windows-install/',",
+    "      linux:   'https://docs.docker.com/desktop/install/linux-install/',",
+    '    },',
+    `    required: config.deploy === 'docker',`,
+    "    reason:   'Required for docker compose up',",
+    '  },',
+    '  {',
+    "    name:    'Docker Compose',",
+    "    command: 'docker compose version',",
+    '    install: {',
+    "      all: 'Included with Docker Desktop',",
+    '    },',
+    `    required: config.deploy === 'docker',`,
+    '  },',
+    ']',
+    '',
+    "console.log('\\n◆ Checking prerequisites...\\n')",
+    'let prereqFailed = false',
+    '',
+    'for (const prereq of prereqs) {',
+    '  if (!prereq.required) continue',
+    '  try {',
+    "    const out = execSync(prereq.command, { encoding: 'utf8', stdio: 'pipe' }).trim()",
+    '    const versionOk = prereq.versionCheck ? prereq.versionCheck(out) : true',
+    '    if (versionOk) {',
+    "      console.log(`  \\x1b[32m✓\\x1b[0m ${prereq.name}`)",
+    '    } else {',
+    "      console.log(`  \\x1b[31m✗\\x1b[0m ${prereq.name} — version too old`)",
+    '      const platform = process.platform',
+    "      const cmd = prereq.install[platform] || prereq.install.all",
+    "      if (cmd) console.log(`    \\x1b[2mInstall: ${cmd}\\x1b[0m`)",
+    '      prereqFailed = true',
+    '    }',
+    '  } catch {',
+    "    console.log(`  \\x1b[31m✗\\x1b[0m ${prereq.name} — not found`)",
+    '    const platform = process.platform',
+    "    const cmd = prereq.install[platform] || prereq.install.all",
+    "    if (cmd) console.log(`    \\x1b[2mInstall: ${cmd}\\x1b[0m`)",
+    '    prereqFailed = true',
+    '  }',
+    '}',
+    '',
+    '// Warn-only prereqs',
+    'for (const prereq of prereqs.filter(p => !p.required)) {',
+    '  try {',
+    "    execSync(prereq.command, { stdio: 'pipe' })",
+    "    console.log(`  \\x1b[32m✓\\x1b[0m ${prereq.name}`)",
+    '  } catch {',
+    "    console.log(`  \\x1b[33m⚠\\x1b[0m ${prereq.name} — not found (optional)`)",
+    "    if (prereq.reason) console.log(`    \\x1b[2m${prereq.reason}\\x1b[0m`)",
+    '    const platform = process.platform',
+    "    const cmd = prereq.install[platform] || prereq.install.all",
+    "    if (cmd) console.log(`    \\x1b[2mInstall: ${cmd}\\x1b[0m`)",
+    '  }',
+    '}',
+    '',
+    'if (prereqFailed) {',
+    "  console.log('\\n  \\x1b[31m✗ Install missing prerequisites then run again.\\x1b[0m\\n')",
+    '  process.exit(1)',
+    '}',
+    '',
+    '// ── Project checks ──',
     '',
     'const results = []',
     '',
@@ -1858,11 +2114,11 @@ print("(Connect to your test runner output for full diff)")
 `);
 
   write('pipeline/scripts/generate-pr-body.py', `#!/usr/bin/env python3
-"""Generate PR body from evidence package. Usage: python generate-pr-body.py STORY-001"""
+"""Generate PR body from evidence package. Usage: python generate-pr-body.py ${item001}"""
 import json, sys, os
 from datetime import datetime
 
-story_id = sys.argv[1] if len(sys.argv) > 1 else "STORY-001"
+story_id = sys.argv[1] if len(sys.argv) > 1 else "${item001}"
 req_path = f".agent/requirements/{story_id}-validated.json"
 story = {}
 if os.path.exists(req_path):
@@ -2111,7 +2367,7 @@ SELECT create_graph('${config.projectName}_graph');
 
   // ── Example artifacts ──
   const exReq = (ctx) => JSON.stringify({
-    story_id: "STORY-001",
+    story_id: item001,
     title: ctx === 'greenfield' ? "Property CRUD — create, read, update, archive" : "Add rate limiting to POST /auth/login",
     type: "feature", priority: "P1", context: ctx,
     acceptance_criteria: [{
@@ -2128,7 +2384,7 @@ SELECT create_graph('${config.projectName}_graph');
   write('.agent/examples/greenfield/validated_requirement.json', exReq('greenfield'));
   write('.agent/examples/brownfield/validated_requirement.json', exReq('brownfield'));
 
-  write('.agent/examples/greenfield/STORY-001-T001.plan.md', `# STORY-001-T001 — Property Service + Repository
+  write(`.agent/examples/greenfield/${item001}-T001.plan.md`, `# ${item001}-T001 — Property Service + Repository
 
 ## Status
 PENDING
@@ -2166,7 +2422,7 @@ Blocks: T002
 <!-- Format: [ROLE GATE timestamp]: note text -->
 `);
 
-  write('.agent/examples/brownfield/STORY-001-T001.plan.md', `# STORY-001-T001 — Redis Rate Limit Store
+  write(`.agent/examples/brownfield/${item001}-T001.plan.md`, `# ${item001}-T001 — Redis Rate Limit Store
 
 ## Status
 PENDING
@@ -2225,9 +2481,17 @@ Blocks: T002
     write('.claude/constitutions/mongodb.md', mongodbConstitution(config));
   }
 
+  write('.claude/constitutions/config.md', configConstitution(config));
+  write('.claude/constitutions/docker.md', dockerConstitution(config));
+
   const hasAgentsConst = config.projectType === 'full' || config.projectType === 'agent';
   if (hasAgentsConst) {
     write('.claude/constitutions/langgraph.md', langgraphConstitution(config));
+  }
+
+  // ── AGENTS.md for Codex ──
+  if (config.agent === 'codex' || config.agent === 'both') {
+    write('AGENTS.md', agentsMdTemplate(config))
   }
 
   // ── Story type templates ──
@@ -2555,7 +2819,7 @@ APPROVE: continue | REQUEST CHANGES: agent corrects | REJECT: replan
 
 ## G4 QA Sign-Off (Day 9)
 
-Run: yooti qa:review STORY-NNN
+Run: yooti qa:review ${itemNNN}
 
 ### Hard gates (any failure = automatic reject)
 | Gate | Threshold | Evidence file |
@@ -2585,6 +2849,8 @@ FAIL (soft gate): QA reviews and decides — approve or reject with notes
 - [ ] Rollback plan confirmed
 GO: deploy | NO-GO: hold
 `);
+
+  write('docs/PROMPTS.md', promptsGuideTemplate(config));
 
   // ── Verify critical files exist ──
   const criticalFiles = [];
@@ -3308,13 +3574,13 @@ function goodDecompositionExample(config) {
   return `# Good task decomposition — reference example
 
 ## Story
-STORY-003 — As a new visitor I want to create an account
+${itemPrefix ? itemPrefix + '-003' : '003'} — As a new visitor I want to create an account
 Complexity: M
 Affected layers: database, api, frontend
 
 ## Correct decomposition — 4 tasks for M complexity
 
-STORY-003-T001 — Database schema and user model
+${itemPrefix ? itemPrefix + '-003' : '003'}-T001 — Database schema and user model
   Layer:      database
   Status:     PENDING
   Files:
@@ -3329,7 +3595,7 @@ STORY-003-T001 — Database schema and user model
     3. Write migration
     4. Write unit tests for model
 
-STORY-003-T002 — Registration API endpoint
+${itemPrefix ? itemPrefix + '-003' : '003'}-T002 — Registration API endpoint
   Layer:      api
   Status:     PENDING
   Files:
@@ -3345,7 +3611,7 @@ STORY-003-T002 — Registration API endpoint
     3. Add rate limiting middleware
     4. Write integration tests for all AC
 
-STORY-003-T003 — Welcome email service
+${itemPrefix ? itemPrefix + '-003' : '003'}-T003 — Welcome email service
   Layer:      api (async)
   Status:     PENDING
   Files:
@@ -3359,7 +3625,7 @@ STORY-003-T003 — Welcome email service
     3. Wire to registration completion event
     4. Write integration test with mocked email
 
-STORY-003-T004 — Registration frontend form
+${itemPrefix ? itemPrefix + '-003' : '003'}-T004 — Registration frontend form
   Layer:      frontend
   Status:     PENDING
   Files:
@@ -3388,17 +3654,17 @@ function badDecompositionExample(config) {
   return `# Bad task decomposition — what NOT to do
 
 ## Story
-STORY-003 — As a new visitor I want to create an account
+${itemPrefix ? itemPrefix + '-003' : '003'} — As a new visitor I want to create an account
 Complexity: M
 
 ## Wrong decomposition — one task per AC
 
-STORY-003-T001 — Implement AC-1 account creation     ✗
-STORY-003-T002 — Implement AC-2 duplicate email      ✗
-STORY-003-T003 — Implement AC-3 password validation  ✗
-STORY-003-T004 — Implement AC-4 email validation     ✗
-STORY-003-T005 — Implement AC-5 welcome email        ✗
-STORY-003-T006 — Implement AC-6 rate limiting        ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T001 — Implement AC-1 account creation     ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T002 — Implement AC-2 duplicate email      ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T003 — Implement AC-3 password validation  ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T004 — Implement AC-4 email validation     ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T005 — Implement AC-5 welcome email        ✗
+${itemPrefix ? itemPrefix + '-003' : '003'}-T006 — Implement AC-6 rate limiting        ✗
 
 ## Why this is wrong
 
@@ -3647,6 +3913,257 @@ function envExampleTemplate(config) {
   return lines.join('\n');
 }
 
+// ── PROMPTS.md template ──
+
+function promptsGuideTemplate(config) {
+  const agent = config.agent === 'codex' ? 'Codex CLI' : 'Claude Code'
+  const t3 = '```'
+  return `# Yooti — Prompt Guide
+# The exact prompt to use at every pipeline stage
+# Agent: ${agent} · Project: ${config.projectName}
+
+---
+
+## How to use this guide
+
+Copy the prompt for your current stage and paste it into ${agent}.
+You do not need to explain the pipeline — the agent reads CLAUDE.md.
+Shorter prompts are better. If the prompt is long, something is
+missing from CLAUDE.md — fix it there, not in the prompt.
+
+---
+
+## PHASE 2 — Story decomposition (plan files only)
+
+${t3}
+Proceed to Phase 2 for [${itemTag}].
+${t3}
+
+For multiple stories:
+${t3}
+Proceed to Phase 2 for ${item001}, ${itemPrefix ? itemPrefix + '-002' : '002'}, ${itemPrefix ? itemPrefix + '-003' : '003'}.
+${t3}
+
+What the agent produces: .plan.md files in .agent/plans/
+What it does NOT produce: any code, tests, or implementation
+When to use: after G1 approval, before G2 review
+
+---
+
+## PHASE 4 — Code generation
+
+${t3}
+Proceed to Phase 4 for [${itemTag}].
+${t3}
+
+For multiple stories in dependency order:
+${t3}
+Proceed to Phase 4 for all approved stories in dependency order.
+${t3}
+
+What the agent produces: code, tests, evidence package, PR
+Prerequisite: G2 gate must be signed first
+When to use: after G2 approval
+
+---
+
+## PHASE 5 — Evidence package (if agent skipped it)
+
+${t3}
+Phase 5 was skipped for [${itemTag}].
+Generate the evidence package in .agent/evidence/[${itemTag}]/
+Read the coverage from services/api_python/coverage.json
+Do not re-run tests — just generate the evidence files and PR body.
+${t3}
+
+When to use: if the agent opened a PR without generating evidence
+
+---
+
+## PHASE 2 — Regenerate plans (if plans are wrong)
+
+${t3}
+The plans for [${itemTag}] are incorrect.
+Delete .agent/plans/[${itemTag}]-*.plan.md
+Re-read .claude/CLAUDE.md decomposition rules.
+Regenerate plans — split by layer not by AC.
+Do not write any code.
+${t3}
+
+When to use: if the architect rejects plans at G2
+
+---
+
+## CORRECTION — Fix a specific issue mid-generation
+
+${t3}
+Read .agent/corrections/[TASK-ID]-[timestamp].md
+Apply the correction to [TASK-ID].
+Re-run the quality loop.
+Do not change anything outside the correction scope.
+${t3}
+
+When to use: after running yooti correct:inject
+
+---
+
+## ESCALATION — Resolve a blocked task
+
+${t3}
+Read .agent/escalations/[TASK-ID]-[type].md
+The escalation has been resolved: [brief description of resolution]
+Continue with [TASK-ID].
+${t3}
+
+When to use: after resolving an agent escalation
+
+---
+
+## CONSTITUTION VIOLATION — Fix a specific violation
+
+${t3}
+The code audit for [${itemTag}] found violations.
+Read .agent/evidence/[${itemTag}]/code-audit.md
+Fix each violation listed.
+Re-run the quality loop.
+Regenerate the evidence package.
+Do not change any tests.
+${t3}
+
+When to use: if code-audit.md shows violations before PR
+
+---
+
+## COVERAGE — Fix low coverage
+
+${t3}
+Coverage for [${itemTag}] is below 80%.
+Run: pytest tests/unit/ --cov=src --cov-report=term-missing
+Add tests for every uncovered line in business logic files.
+Do not add coverage exclusions without architect approval.
+${t3}
+
+When to use: if coverage gate fails at G4
+
+---
+
+## SPRINT START — Beginning of a new sprint
+
+Step 1 — PM approves stories:
+${t3}
+yooti story:approve --all
+${t3}
+
+Step 2 — Start sprint:
+${t3}
+yooti sprint:start
+${t3}
+
+Step 3 — Generate plans:
+${t3}
+Proceed to Phase 2 for all new stories in this sprint.
+${t3}
+
+Step 4 — Architect reviews:
+${t3}
+yooti plan:review ${itemNNN}
+${t3}
+
+Step 5 — Generate code:
+${t3}
+Proceed to Phase 4 for all approved stories in dependency order.
+${t3}
+
+---
+
+## SPRINT END — Closing a sprint
+
+Step 1 — QA review each story:
+${t3}
+yooti qa:review ${itemNNN}
+${t3}
+
+Step 2 — Sprint report:
+${t3}
+yooti sprint:report
+${t3}
+
+Step 3 — Retrospective:
+${t3}
+yooti sprint:retro
+${t3}
+
+---
+
+## DAILY — Standup
+
+${t3}
+yooti sm:standup
+${t3}
+
+---
+
+## COMMON MISTAKES AND FIXES
+
+| Symptom | Cause | Fix |
+|---------|-------|-----|
+| Agent writes code during Phase 2 | CLAUDE.md Phase 2 section missing | Add Phase 2 section to CLAUDE.md |
+| Agent creates one task per AC | Decomposition rules not read | Re-run Phase 2 with explicit instruction to re-read rules |
+| PR opened without evidence package | Phase 5 skipped | Use Phase 5 regeneration prompt above |
+| Coverage shows stale 76% | Evidence not regenerated after fix | Use evidence regeneration prompt |
+| Agent touches out-of-scope files | Scope section unclear in plan | Amend plan with yooti plan:amend, re-run task |
+| Constitution violations found | Agent did not read constitutions | Use violation fix prompt above |
+| Docker ports mismatch | .env and docker-compose not in sync | Read docker.md constitution, fix both files |
+`
+}
+
+// ── AGENTS.md template (for Codex projects) ──
+
+function agentsMdTemplate(config) {
+  return `# AGENTS.md — ${config.projectName}
+# This file is read by Codex CLI before every task
+
+## Primary context
+
+Read .claude/CLAUDE.md before every task.
+That file contains all pipeline rules, phase definitions,
+gate requirements, and quality thresholds.
+
+## Constitutions
+
+Read the relevant constitution files from .claude/constitutions/
+before writing any code. The list is in CLAUDE.md.
+
+## Task context
+
+For each task:
+  1. Read .agent/requirements/[${itemTag}]-validated.json
+  2. Read .agent/plans/[${itemTag}]-[TASK-ID].plan.md
+  3. Read .agent/gates/[${itemTag}]-G2-approved.md (must exist)
+  4. Follow Phase 4 rules from CLAUDE.md exactly
+
+## Evidence package
+
+Before opening a PR generate the evidence package
+as described in Phase 5 of CLAUDE.md.
+
+## What is the same as Claude Code
+
+  - All pipeline phases (1-7)
+  - All human gates (G1-G5)
+  - All quality thresholds
+  - All constitution rules
+  - Evidence package format
+  - PR body format
+
+## What is different
+
+  - Use \`codex\` CLI instead of \`claude\` CLI
+  - This AGENTS.md file as entry point instead of .claude/
+  - Codex may need explicit constitution file paths in prompts
+`
+}
+
 // ── yooti.config.json template ──
 
 function yootiConfigTemplate(config) {
@@ -3662,6 +4179,8 @@ function yootiConfigTemplate(config) {
     stack:            config.stack           || [],
     databases:        config.databases       || ['postgres', 'redis'],
     vector_store:     config.vectorStore     || 'none',
+    item_prefix:      config.itemPrefix ?? 'STORY',
+    item_format:      config.itemPrefix ? `{prefix}-{number}` : '{number}',
     agent_frameworks: config.agentFrameworks || [],
     llm_providers:    config.llmProviders    || [],
 

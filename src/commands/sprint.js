@@ -3,6 +3,7 @@ import { execSync } from 'child_process'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import chalk from 'chalk'
 import inquirer from 'inquirer'
+import { placeholderExample } from '../utils/itemId.js'
 
 export function evidencePackageComplete(storyId) {
   const evidenceDir = `.agent/evidence/${storyId}`
@@ -11,6 +12,7 @@ export function evidencePackageComplete(storyId) {
     `${evidenceDir}/coverage-summary.json`,
     `${evidenceDir}/regression-diff.json`,
     `${evidenceDir}/security-scan.json`,
+    `${evidenceDir}/code-audit.md`,
     `${evidenceDir}/pr-body.md`,
   ]
   const missing = required.filter(f => !existsSync(f))
@@ -154,7 +156,7 @@ export async function sprintStart(options = {}) {
   console.log(`  ${chalk.green('✓')} ${storyCount} story/stories ready`)
   console.log('')
   console.log(chalk.dim('  Next steps:'))
-  console.log(chalk.dim('    Architect reviews plans: yooti plan:review STORY-001'))
+  console.log(chalk.dim(`    Architect reviews plans: yooti plan:review ${placeholderExample()}`))
   console.log(chalk.dim('    View tasks:              yooti task:list'))
-  console.log(chalk.dim('    Add QA plan:             yooti qa:plan STORY-001\n'))
+  console.log(chalk.dim(`    Add QA plan:             yooti qa:plan ${placeholderExample()}\n`))
 }

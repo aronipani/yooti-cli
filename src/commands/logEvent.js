@@ -3,13 +3,14 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { appendEvent, initLog } from '../audit/logger.js'
 import { existsSync } from 'fs'
+import { validateId, placeholderExample } from '../utils/itemId.js'
 
 export async function logEvent(storyId) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input', name: 'storyId',
-      message: 'Story ID',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }])
     storyId = ans.storyId
   }

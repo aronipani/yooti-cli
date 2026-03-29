@@ -5,6 +5,7 @@ import { mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { generateFiles } from '../generator.js';
 import { stageDescription, stagePhases } from '../stages.js';
+import { checkPrereqs } from '../prereqs.js';
 
 async function installDependencies(projectDir, config) {
   const { execa } = await import('execa')
@@ -103,6 +104,15 @@ export async function init(projectName, cliOptions) {
   const isBrownfield = runningInRepo && existsSync('package.json');
 
   console.log(chalk.cyan('◆ yooti init — autonomous SDLC scaffold\n'));
+
+  // Run prerequisite checks before anything else
+  // Use a minimal config based on CLI flags available at this point
+  const preConfig = {
+    stack: cliOptions.stack ? cliOptions.stack.split(',') : [],
+    deploy: cliOptions.deploy || 'docker',
+    projectType: cliOptions.type || 'full',
+  };
+  const { failed } = checkPrereqs(preConfig, { exitOnFail: true });
 
   // If all required flags are provided, skip the wizard entirely
   const hasProjectName = projectName && projectName !== '.';
@@ -289,10 +299,35 @@ export async function init(projectName, cliOptions) {
         message: 'AI agent tooling',
         when: !cliOptions.agent,
         choices: [
-          { name: 'Claude Code  (via .claude/ — recommended)', value: 'claude-code' },
-          { name: 'Codex (OpenAI)', value: 'codex' },
-          { name: 'Both', value: 'both' },
+          { name: 'Claude Code (Anthropic) — recommended', value: 'claude-code' },
+          { name: 'Codex CLI (OpenAI)',                    value: 'codex' },
+          { name: 'Both — primary Claude, fallback Codex', value: 'both' },
+          { name: 'Other / manual',                        value: 'manual' },
         ],
+      },
+      {
+        type: 'list',
+        name: 'itemPrefix',
+        message: 'Work item naming convention',
+        when: !cliOptions.itemPrefix && cliOptions.itemPrefix !== '',
+        choices: [
+          { name: 'STORY-001   (default — Yooti standard)',  value: 'STORY' },
+          { name: 'US-001      (User Story)',                 value: 'US' },
+          { name: 'FEAT-001    (Feature)',                    value: 'FEAT' },
+          { name: 'BUG-001     (Bug tracker style)',          value: 'BUG' },
+          { name: 'TASK-001    (Task)',                       value: 'TASK' },
+          { name: 'TICKET-001  (Support / ITSM style)',       value: 'TICKET' },
+          { name: 'Custom      (enter your own prefix)',      value: 'custom' },
+          { name: 'None        (001 only — no prefix)',       value: '' },
+        ]
+      },
+      {
+        type: 'input',
+        name: 'itemPrefixCustom',
+        message: 'Enter your prefix (letters only, e.g. ABC)',
+        when: a => a.itemPrefix === 'custom',
+        validate: v => /^[A-Z]+$/i.test(v) || 'Letters only, no spaces or numbers',
+        filter:   v => v.toUpperCase()
       },
       {
         type: 'list',
@@ -375,6 +410,9 @@ export async function init(projectName, cliOptions) {
     ci: cliOptions.ci || answers.ci || 'github-actions',
     deploy: cliOptions.deploy || answers.deploy || 'docker',
     agent: cliOptions.agent || answers.agent || 'claude-code',
+    itemPrefix: cliOptions.itemPrefix !== undefined
+      ? cliOptions.itemPrefix
+      : (answers.itemPrefix === 'custom' ? answers.itemPrefixCustom : (answers.itemPrefix ?? 'STORY')),
     stage: parseInt(cliOptions.stage || answers.stage || 3),
     gitMode: cliOptions.gitMode || answers.gitMode || 'init-commit',
     noGit: cliOptions.git === false,

@@ -38,6 +38,7 @@ program
   .option('--llm-provider <provider>', 'anthropic, openai, or both', 'anthropic')
   .option('--vector-store <store>', 'pgvector, chroma, or none', 'pgvector')
   .option('--stage <number>', 'pipeline adoption stage 1-5')
+  .option('--item-prefix <prefix>', 'work item prefix (e.g. STORY, BUG, FEAT, TASK, US, TICKET, or "" for none)')
   .option('--no-git', 'skip git initialisation')
   .option('--git-mode <mode>', 'init-commit | init-only | skip')
   .option('--yooti-os', 'enable Yooti OS integration')
@@ -137,6 +138,14 @@ program
   .action(async () => {
     const { preflight } = await import('../src/commands/preflight.js');
     await preflight();
+  });
+
+program
+  .command('doctor')
+  .description('Check environment health — prerequisites, tools, and project setup')
+  .action(async () => {
+    const { doctor } = await import('../src/commands/doctor.js');
+    await doctor();
   });
 
 program
@@ -247,6 +256,14 @@ program
   .action(async (options) => {
     const { sprintReport } = await import('../src/commands/audit.js');
     await sprintReport(options);
+  });
+
+program
+  .command('sprint:retro')
+  .description('Run sprint retrospective — metrics, what went well, action items')
+  .action(async () => {
+    const { sprintRetro } = await import('../src/commands/audit.js');
+    await sprintRetro();
   });
 
 program

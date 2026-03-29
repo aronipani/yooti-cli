@@ -3,6 +3,7 @@ import chalk from 'chalk'
 import inquirer from 'inquirer'
 import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs'
 import { logGate } from '../audit/logger.js'
+import { validateId, placeholderExample } from '../utils/itemId.js'
 
 export async function planAmend(taskId) {
   const planPath = `.agent/plans/${taskId}.plan.md`
@@ -132,8 +133,8 @@ export async function planReview(storyId) {
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input', name: 'storyId',
-      message: 'Story ID (e.g. STORY-001)',
-      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+      message: `Item ID (e.g. ${placeholderExample()})`,
+      validate: v => validateId(v) === true || validateId(v)
     }]);
     storyId = ans.storyId;
   }
