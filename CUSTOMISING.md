@@ -24,6 +24,119 @@ at the expected time.
 
 ---
 
+## What the evidence package looks like
+
+Gate G4 reads these files from `.agent/evidence/[ID]/`. Your custom scripts
+must produce files in these formats — the content is yours, the schema is fixed.
+
+**test-results.json** — pass/fail counts per layer:
+
+```json
+{
+  "story_id": "PROJ-123",
+  "generated_at": "2026-03-29T14:32:00Z",
+  "layers": {
+    "api": {
+      "unit":        { "passed": 24, "failed": 0, "skipped": 0 },
+      "integration": { "passed":  8, "failed": 0, "skipped": 0 }
+    },
+    "frontend": {
+      "unit":        { "passed": 18, "failed": 0, "skipped": 2 }
+    }
+  },
+  "total_passed": 50,
+  "total_failed": 0,
+  "duration_seconds": 12.4
+}
+```
+
+**coverage-summary.json** — overall and new code percentages:
+
+```json
+{
+  "story_id": "PROJ-123",
+  "overall_pct": 94.2,
+  "new_code_pct": 98.7,
+  "threshold_overall": 80,
+  "threshold_new_code": 90,
+  "passed": true,
+  "layers": {
+    "api":      { "lines": 94.2, "branches": 91.0 },
+    "frontend": { "lines": 96.1, "branches": 88.4 }
+  },
+  "uncovered_files": []
+}
+```
+
+**security-scan.json** — dependency and code scan results:
+
+```json
+{
+  "story_id": "PROJ-123",
+  "scanned_at": "2026-03-29T14:33:00Z",
+  "dependency_scan": {
+    "tool": "snyk",
+    "critical": 0,
+    "high": 0,
+    "medium": 2,
+    "low": 5,
+    "passed": true
+  },
+  "code_scan": {
+    "tool": "semgrep",
+    "findings": 0,
+    "passed": true
+  }
+}
+```
+
+**regression-diff.json** — tests failing that were passing before the sprint:
+
+```json
+{
+  "story_id": "PROJ-123",
+  "baseline_captured": "2026-03-28T09:00:00Z",
+  "newly_failing": [],
+  "newly_passing": 12,
+  "total_tests": 318,
+  "passed": true
+}
+```
+
+**code-audit.md** — constitution compliance check (plain markdown):
+
+```markdown
+# Code Audit — PROJ-123
+Generated: 2026-03-29T14:34:00Z
+
+## Constitution checks
+
+| Rule | Files checked | Violations |
+|------|--------------|-----------|
+| No hardcoded secrets | 14 | 0 |
+| Tests before implementation | 6 new files | 0 |
+| No bare except clauses | 14 | 0 |
+| No direct DB queries in routes | 4 | 0 |
+| All public functions documented | 14 | 0 |
+
+**Result: PASSED — 0 violations**
+```
+
+**What your custom scripts must output:**
+The agent calls your `test_coverage` command and reads the output.
+For non-standard tools, pipe the output to the evidence folder and tell
+the agent in CLAUDE.md how to parse it:
+
+```markdown
+## Coverage output — Go
+Command: go test ./... -coverprofile=coverage.out
+Parse:   go tool cover -func=coverage.out | tail -1
+Format:  "total: (statements) 94.2%"
+Write:   .agent/evidence/[ID]/coverage-summary.json
+```
+
+---
+
 ## Step 1 — Tell Yooti about your toolchain
 
 Open `yooti.config.json` and update the toolchain section for your layers:

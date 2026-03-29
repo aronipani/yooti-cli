@@ -1,4 +1,4 @@
-x# Yooti — AWS Local Development Guide
+# Yooti — AWS Local Development Guide
 
 ## Building and testing AWS microservices without deploying to the cloud
 

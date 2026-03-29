@@ -28,6 +28,40 @@ is what makes the framework feel plug-and-play for any team.
 
 ---
 
+## Before you start — yooti doctor
+
+Install the CLI and run this before reading any further:
+
+    npm install -g @yooti/cli
+    yooti doctor
+
+`yooti doctor` checks every engine requirement, shows the current status,
+and gives you a copy-paste install command for anything missing:
+
+    ◆ Yooti Doctor — prerequisite check
+    ──────────────────────────────────────────────────────────
+    ✓  Node.js        20.11.0    (required: >= 20)
+    ✓  Git            2.43.0
+    ✓  GitHub CLI     2.45.0
+    ✗  Python         not found
+       Install (Mac):    brew install python@3.12
+       Install (Win):    winget install Python.Python.3.12
+       Install (Linux):  sudo apt install python3.12
+    ✓  Docker         25.0.3
+    ✓  Claude Code    1.2.0
+
+    1 prerequisite missing. Fix it then run: yooti doctor
+    ──────────────────────────────────────────────────────────
+    Engine:   Node.js + Python + Git
+    Agent:    Claude Code
+    Optional: Docker (local stack), GitHub CLI (auto PRs)
+
+Fix everything it flags. Run `yooti doctor` again until all green.
+This is your single source of truth for whether your machine is ready.
+The requirements below explain what each tool is for and why it is needed.
+
+---
+
 ## 1. Engine requirements — what runs Yooti
 
 These tools run the CLI, the pipeline scripts, and the CI workflows.
@@ -307,10 +341,10 @@ RI defaults are replaced with your team's tools via toolchain config.
 - [x] sprint:retro command
 - [x] sprint:report validates definition of done
 - [x] Code audit in Phase 5 against constitutions
+- [x] Cross-platform: Mac, Linux, Windows
 - [x] AWS services constitution — Lambda, DynamoDB, SQS, SNS,
       EventBridge, Firehose, Fargate, API Gateway
 - [x] LocalStack in docker-compose for AWS integration testing
-- [x] Cross-platform: Mac, Linux, Windows
 
 ### Roadmap
 - [ ] upgrade command — regenerate pipeline in existing project (v1.3)

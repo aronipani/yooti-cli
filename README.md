@@ -128,6 +128,70 @@ delivery pipeline.
 The gates are the five decision points where human judgement is irreplaceable.
 Everything between them is the agent's job.
 
+```mermaid
+flowchart TD
+    A([📋 User Story]) --> G1
+
+    G1{{"🔵 Gate G1\nPM approves stories"}}
+    G1 -->|approved| P1
+
+    subgraph P1 ["Phase 2 — Agent"]
+        direction TB
+        T1[Validates story into spec]
+        T2[Decomposes into task plans]
+        T1 --> T2
+    end
+
+    P1 --> G2
+
+    G2{{"🔵 Gate G2\nArchitect reviews plans"}}
+    G2 -->|approved| P2
+    G2 -->|rejected| P1
+
+    subgraph P2 ["Phases 3-5 — Agent"]
+        direction TB
+        B1[Sets up environment + baseline]
+        B2[Writes tests first — TDD]
+        B3[Writes implementation]
+        B4[Self-heals up to 5 iterations]
+        B5[Runs full quality suite]
+        B6[Packages evidence]
+        B1 --> B2 --> B3 --> B4 --> B5 --> B6
+    end
+
+    P2 --> G3
+
+    G3{{"🔵 Gate G3\nDeveloper reviews PR\nin GitHub"}}
+    G3 -->|merged| G4
+    G3 -->|rejected| FIX1[Agent applies correction]
+    FIX1 --> P2
+
+    G4{{"🔵 Gate G4\nQA reviews evidence\npackage"}}
+    G4 -->|approved| P3
+    G4 -->|rejected| P2
+
+    subgraph P3 ["Phase 7 — Agent"]
+        C1[Deploys to staging]
+        C2[Runs smoke tests]
+        C3[Generates health report]
+        C1 --> C2 --> C3
+    end
+
+    P3 --> G5
+
+    G5{{"🔵 Gate G5\nRelease Manager\napproves production"}}
+    G5 -->|approved| DONE([✅ Shipped to production])
+    G5 -->|rejected| HOLD[Stays in staging]
+
+    style G1 fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style G2 fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style G3 fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style G4 fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style G5 fill:#2563eb,color:#fff,stroke:#1d4ed8
+    style DONE fill:#16a34a,color:#fff,stroke:#15803d
+    style HOLD fill:#dc2626,color:#fff,stroke:#b91c1c
+```
+
 ---
 
 **Gate G1 — The PM decides stories are ready**
