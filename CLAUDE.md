@@ -194,6 +194,147 @@ Do NOT silently change template content — the agent prompt files in particular
 
 ---
 
+## Phase 2 — story decomposition output
+
+Phase 2 produces PLAN FILES ONLY.
+No code. No tests. No implementation. No imports.
+
+For each story in scope:
+  1. Read .agent/requirements/[STORY-ID]-validated.json
+  2. Apply the decomposition rules above
+  3. Write one .plan.md file per task to .agent/plans/
+  4. Mark each plan Status: PENDING
+  5. Stop — wait for Gate G2 before writing any code
+
+Phase 2 is complete when:
+  Every story has at least one .plan.md file
+  Every plan has: Status, Layer, Scope (CREATE/MODIFY/OUT OF SCOPE),
+    AC covered, Implementation steps, Dependencies
+  No code files have been created or modified
+
+Phase 4 starts ONLY after:
+  Gate G2 is signed — .agent/gates/[STORY-ID]-G2-approved.md exists
+  Architect has reviewed and approved the plans
+
+If you find yourself writing code during Phase 2 — STOP.
+  Delete the code.
+  Write the plan file instead.
+  Wait for G2 approval.
+
+## Phase 3 — environment setup
+
+Phase 3 runs automatically before Phase 4.
+It does not require human input.
+
+  1. Create feature branch: git checkout -b feature/[STORY-ID]
+  2. Run preflight checks: node pipeline/scripts/preflight.js
+  3. Confirm .agent/gates/[STORY-ID]-G2-approved.md exists
+  4. Confirm .agent/plans/[STORY-ID]-*.plan.md files exist
+  5. Proceed to Phase 4
+
+If preflight fails: write escalation and stop.
+If G2 gate is missing: write escalation and stop.
+
+## Phase 5 — test orchestration and evidence package
+
+Phase 5 runs after all tasks in a story are COMPLETE.
+Phase 5 must complete before any PR is opened.
+Never open a PR without a complete evidence package.
+
+Steps in order:
+  1. Run full test suite for all affected layers
+  2. Run coverage report — save to coverage.json
+  3. Run regression diff: python tests/regression/comparator/diff.py
+  4. Run security scan if available (snyk, semgrep)
+  5. Create .agent/evidence/[STORY-ID]/ folder
+  6. Write evidence files:
+
+     test-results.json
+     {
+       "story_id": "[STORY-ID]",
+       "generated_at": "[ISO timestamp]",
+       "unit": { "total": N, "passed": N, "failed": 0 },
+       "integration": { "total": N, "passed": N, "failed": 0 }
+     }
+
+     coverage-summary.json
+     {
+       "story_id": "[STORY-ID]",
+       "generated_at": "[ISO timestamp]",
+       "overall": N.N,
+       "new_code": N.N,
+       "files": []
+     }
+
+     regression-diff.json
+     {
+       "story_id": "[STORY-ID]",
+       "generated_at": "[ISO timestamp]",
+       "baseline_sprint": "sprint-N",
+       "newly_failing": [],
+       "newly_passing": [],
+       "total_tests_before": N,
+       "total_tests_after": N
+     }
+
+     security-scan.json
+     {
+       "story_id": "[STORY-ID]",
+       "generated_at": "[ISO timestamp]",
+       "snyk": { "critical": 0, "high": 0, "medium": 0 },
+       "semgrep": { "findings": 0 }
+     }
+
+     pr-body.md
+     ## [STORY-ID] — [story title]
+
+     ### Acceptance criteria coverage
+     | AC | Status | Test |
+     |----|--------|------|
+     | AC-1 | PASS | test name |
+
+     ### Test results
+     Unit: N/N passing
+     Integration: N/N passing
+     Regression: 0 newly failing
+
+     ### Coverage
+     Overall: N.N%
+     New code: N.N%
+
+     ### Security
+     Snyk: 0 critical, 0 high
+     Semgrep: 0 findings
+
+     ### Files changed
+     List every file created or modified with line counts.
+
+     ### Deliberate decisions
+     List any non-obvious choices made.
+
+  7. Hard blocks — do NOT open PR if any of these are true:
+     test-results.json shows failed > 0
+     coverage-summary.json shows overall < 80
+     coverage-summary.json shows new_code < 90
+     regression-diff.json shows newly_failing is not empty
+     security-scan.json shows snyk.critical > 0 or snyk.high > 0
+
+  8. Open the PR only after all evidence files exist and
+     all hard blocks are clear
+
+## Gate G3 — PR review
+
+Gate G3 happens entirely in GitHub.
+The developer reviews, approves, and merges the PR in GitHub.
+No CLI command is required at Gate G3.
+After the PR is merged, QA proceeds with: yooti qa:review [STORY-ID]
+
+Do NOT wait for a CLI command at Gate G3.
+Do NOT re-open the PR after it is merged.
+Do NOT start the next story until G3 is complete.
+
+---
+
 ## Phase 5 — mandatory before any PR is opened
 
 Never open a PR before .agent/evidence/[STORY-ID]/ exists.
