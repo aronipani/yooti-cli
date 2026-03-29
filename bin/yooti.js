@@ -57,6 +57,28 @@ program
   });
 
 program
+  .command('story:import')
+  .description('Import stories from a JSON file — skips the wizard')
+  .requiredOption('--file <path>', 'path to JSON file (single story or array of stories)')
+  .option('--overwrite', 'overwrite existing stories with the same ID')
+  .action(async (options) => {
+    const { storyImport } = await import('../src/commands/story.js');
+    await storyImport(options.file, options);
+  });
+
+program
+  .command('story:sample')
+  .description('Import built-in sample stories for a demo app')
+  .option('--app <name>',    'sample app name (e.g. ecommerce)')
+  .option('--sprint <n>',    'import a specific sprint only (e.g. --sprint 1)')
+  .option('--list',          'list all available sample apps')
+  .option('--overwrite',     'overwrite existing stories with the same ID')
+  .action(async (options) => {
+    const { storySample } = await import('../src/commands/story.js');
+    await storySample(options);
+  });
+
+program
   .command('sprint:start')
   .description('Start a sprint — validate stories, create baseline snapshot')
   .action(async () => {
@@ -203,5 +225,14 @@ program
     const { qaReview } = await import('../src/commands/qa.js')
     await qaReview(storyId)
   })
+
+program
+  .command('sm:standup')
+  .description('Generate daily standup summary from pipeline data')
+  .option('--no-save', 'print only, do not save')
+  .action(async (options) => {
+    const { smStandup } = await import('../src/commands/standup.js');
+    await smStandup(options);
+  });
 
 program.parse();
