@@ -79,17 +79,56 @@ program
   });
 
 program
+  .command('story:approve [story-id]')
+  .description('Gate G1 — PM signs off stories before sprint starts')
+  .option('--all',   'approve all validated stories at once')
+  .option('--force', 'approve even if ambiguity flags exist')
+  .action(async (storyId, options) => {
+    const { storyApprove } = await import('../src/commands/story.js');
+    await storyApprove(storyId, options);
+  });
+
+program
   .command('sprint:start')
   .description('Start a sprint — validate stories, create baseline snapshot')
   .action(async () => {
-    console.log(chalk.cyan('\n◆ Sprint start\n'));
-    console.log(`  ${chalk.green('✓')} Stories validated — G1 gate passed`);
-    console.log(`  ${chalk.green('✓')} Feature branches created`);
-    console.log(`  ${chalk.green('✓')} Pre-flight: green`);
-    console.log(`  ${chalk.green('✓')} Baseline → .agent/snapshots/sprint-1-baseline.json`);
-    console.log('');
-    console.log(chalk.dim('  Open VS Code — Claude Code reads .claude/CLAUDE.md automatically'));
-    console.log('');
+    const { sprintStart } = await import('../src/commands/sprint.js');
+    await sprintStart();
+  });
+
+program
+  .command('snapshot [tag]')
+  .description('Capture a regression baseline snapshot')
+  .action(async (tag) => {
+    const { execSync } = await import('child_process');
+    const { existsSync, mkdirSync, writeFileSync } = await import('fs');
+
+    console.log(chalk.cyan('\n◆ Capturing snapshot\n'));
+
+    const snapshotDir = 'tests/regression/baseline';
+    mkdirSync(snapshotDir, { recursive: true });
+
+    const label = tag || new Date().toISOString().split('T')[0];
+    const path  = `${snapshotDir}/${label}-baseline.json`;
+
+    if (existsSync('pipeline/scripts/snapshot.py')) {
+      try {
+        execSync(`python pipeline/scripts/snapshot.py --tag ${label}`, { stdio: 'inherit' });
+        console.log(chalk.green('  ✓ Snapshot captured via pipeline/scripts/snapshot.py'));
+      } catch {
+        console.log(chalk.yellow('  ⚠ Python snapshot script failed — capturing minimal baseline'));
+      }
+    }
+
+    const snapshot = {
+      tag: label,
+      captured_at: new Date().toISOString(),
+      passing_tests: [],
+      failing_tests: []
+    };
+    writeFileSync(path, JSON.stringify(snapshot, null, 2));
+
+    console.log(chalk.green(`  ✓ Baseline saved: ${path}\n`));
   });
 
 program
@@ -141,6 +180,14 @@ program
   .action(async (storyId) => {
     const { planApprove } = await import('../src/commands/plan.js');
     await planApprove(storyId);
+  });
+
+program
+  .command('plan:review [story-id]')
+  .description('Architect reviews all task plans interactively — Gate G2')
+  .action(async (storyId) => {
+    const { planReview } = await import('../src/commands/plan.js');
+    await planReview(storyId);
   });
 
 // ── Context injection ──

@@ -1,6 +1,6 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer';
-import { writeFileSync, readFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 import ora from 'ora';
 import { initLog, logPhaseStart, logAgentAction } from '../audit/logger.js';
@@ -278,5 +278,159 @@ export async function storySample(options = {}) {
       console.log(chalk.dim('  Tip: import Sprint 1 only with --sprint 1'));
     }
     console.log(chalk.dim('  Next step: yooti sprint:start\n'));
+  }
+}
+
+export async function storyApprove(storyId, options = {}) {
+  const reqDir   = '.agent/requirements';
+  const gatesDir = '.agent/gates';
+  mkdirSync(gatesDir, { recursive: true });
+
+  // If --all flag, approve every validated story
+  if (options.all) {
+    if (!existsSync(reqDir)) {
+      console.log(chalk.red('\n  ✗ No requirements found. Add stories first.\n'));
+      process.exit(1);
+    }
+    const stories = readdirSync(reqDir)
+      .filter(f => f.endsWith('-validated.json'))
+      .map(f => f.replace('-validated.json', ''));
+
+    if (stories.length === 0) {
+      console.log(chalk.dim('\n  No stories to approve.\n'));
+      return;
+    }
+
+    console.log(chalk.cyan(`\n◆ Gate G1 — PM Sign-off (${stories.length} stories)\n`));
+
+    stories.forEach((sid, i) => {
+      const story = JSON.parse(readFileSync(`${reqDir}/${sid}-validated.json`, 'utf8'));
+      const acCount = story.acceptance_criteria?.length || 0;
+      const flags   = story.ambiguity_flags?.length || 0;
+      const flagIcon = flags > 0 ? chalk.red(`⚠ ${flags} ambiguity flag(s)`) : chalk.green('✓ no flags');
+      console.log(`  ${i + 1}. ${chalk.white(sid)} — ${story.title?.slice(0, 55)}`);
+      console.log(chalk.dim(`     ${acCount} AC · Priority: ${story.priority} · ${flagIcon}`));
+      console.log('');
+    });
+
+    const flagged = stories.filter(sid => {
+      const s = JSON.parse(readFileSync(`${reqDir}/${sid}-validated.json`, 'utf8'));
+      return s.ambiguity_flags?.length > 0;
+    });
+
+    if (flagged.length > 0 && !options.force) {
+      console.log(chalk.yellow(`  ⚠ ${flagged.length} story/stories have unresolved ambiguity flags:`));
+      flagged.forEach(sid => console.log(chalk.dim(`    ${sid}`)));
+      console.log(chalk.dim('\n  Resolve flags first, or use --force to approve anyway.\n'));
+      process.exit(1);
+    }
+
+    const { name, proceed, notes } = await inquirer.prompt([
+      { type: 'input', name: 'name', message: 'Your name (PM)', validate: v => v.length > 0 },
+      {
+        type: 'confirm', name: 'proceed',
+        message: `Approve all ${stories.length} stories for sprint start?`,
+        default: false
+      },
+      {
+        type: 'input', name: 'notes',
+        message: 'Approval notes',
+        default: 'All stories reviewed. AC are complete and testable.',
+        when: a => a.proceed
+      }
+    ]);
+
+    if (!proceed) {
+      console.log(chalk.dim('\n  Gate G1 not signed. No stories approved.\n'));
+      return;
+    }
+
+    const now = new Date().toISOString();
+    stories.forEach(sid => {
+      writeFileSync(
+        `${gatesDir}/${sid}-G1-approved.md`,
+        `# Gate G1 — PM Sign-off\nStory: ${sid}\nDecision: APPROVED\nReviewed by: ${name}\nDate: ${now}\nNotes: ${notes}\n`
+      );
+      console.log(`  ${chalk.green('✓')} ${sid} — G1 approved`);
+    });
+
+    console.log(`\n  ${chalk.green(stories.length + ' stories approved')} — sprint can start`);
+    console.log(chalk.dim('  Next step: yooti sprint:start\n'));
+    return;
+  }
+
+  // Single story approval
+  if (!storyId) {
+    const ans = await inquirer.prompt([{
+      type: 'input', name: 'storyId',
+      message: 'Story ID (e.g. STORY-001)',
+      validate: v => /^STORY-\d+$/.test(v) || 'Format: STORY-NNN'
+    }]);
+    storyId = ans.storyId;
+  }
+
+  const reqPath = `${reqDir}/${storyId}-validated.json`;
+  if (!existsSync(reqPath)) {
+    console.log(chalk.red(`\n  ✗ Story ${storyId} not found.\n`));
+    process.exit(1);
+  }
+
+  const story = JSON.parse(readFileSync(reqPath, 'utf8'));
+  const acCount = story.acceptance_criteria?.length || 0;
+  const flags   = story.ambiguity_flags?.length || 0;
+
+  console.log(chalk.cyan(`\n◆ Gate G1 — PM Sign-off: ${storyId}\n`));
+  console.log(`  ${chalk.white(story.title)}`);
+  console.log(chalk.dim(`  ${acCount} acceptance criteria · Priority: ${story.priority}`));
+
+  if (flags > 0 && !options.force) {
+    console.log(chalk.red(`\n  ✗ ${flags} unresolved ambiguity flag(s) — resolve before approving`));
+    story.ambiguity_flags.forEach(f => console.log(chalk.dim(`    · ${f}`)));
+    console.log(chalk.dim('\n  Use --force to approve anyway.\n'));
+    process.exit(1);
+  }
+
+  if (flags > 0) {
+    console.log(chalk.yellow(`\n  ⚠ Approving with ${flags} unresolved flag(s) (--force)\n`));
+  }
+
+  console.log('\n  Acceptance criteria:\n');
+  story.acceptance_criteria?.forEach(ac => {
+    console.log(`  ${chalk.green(ac.id)}`);
+    console.log(chalk.dim(`    Given: ${ac.given}`));
+    console.log(chalk.dim(`    When:  ${ac.when}`));
+    console.log(chalk.dim(`    Then:  ${ac.then}`));
+    console.log('');
+  });
+
+  const answers = await inquirer.prompt([
+    { type: 'input', name: 'name', message: 'Your name (PM)', validate: v => v.length > 0 },
+    {
+      type: 'list', name: 'decision', message: 'Decision',
+      choices: [
+        { name: 'Approve — story is complete and unambiguous', value: 'approved' },
+        { name: 'Reject  — story needs more work',             value: 'rejected' }
+      ]
+    },
+    {
+      type: 'input', name: 'notes',
+      message: 'Notes',
+      default: 'Story reviewed. AC are complete and testable.'
+    }
+  ]);
+
+  const now = new Date().toISOString();
+  const filename = `${storyId}-G1-${answers.decision}.md`;
+  writeFileSync(
+    `${gatesDir}/${filename}`,
+    `# Gate G1 — PM Sign-off\nStory: ${storyId}\nDecision: ${answers.decision.toUpperCase()}\nReviewed by: ${answers.name}\nDate: ${now}\nNotes: ${answers.notes}\n`
+  );
+
+  if (answers.decision === 'approved') {
+    console.log(`\n  ${chalk.green('✓')} Gate G1 signed: .agent/gates/${filename}`);
+    console.log(chalk.dim('  Next step: yooti plan:review — architect reviews plans\n'));
+  } else {
+    console.log(`\n  ${chalk.yellow('⚠')} Gate G1 rejected: .agent/gates/${filename}`);
+    console.log(chalk.dim('  Update the story and run this command again.\n'));
   }
 }
