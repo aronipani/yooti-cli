@@ -1577,6 +1577,11 @@ escalation is acknowledged by the developer.
 4. NO SECRETS — all config via environment variables (.env.example has the names)
 5. ZERO WARNINGS — --max-warnings 0 enforced. Fix all warnings.
 6. ESCALATE — write to .agent/escalations/ on: SCOPE_ERROR, ENV_ERROR, SPEC_AMBIGUITY, >5 iterations
+7. SCAFFOLD — if the app cannot render due to missing config files
+   (tailwind.config.js, postcss.config.js, tsconfig.json, index.html,
+   index.css, main.tsx) write an escalation to
+   .agent/escalations/[TASK-ID]-scaffold-incomplete.md and stop.
+   Do not continue if the app cannot actually run.
 
 ## Context: ${config.context.toUpperCase()}
 ${config.context === 'greenfield'
@@ -2618,6 +2623,13 @@ Blocks: T002
     write('frontend/dashboard/tests/setup.ts', testSetupFrontendTs(config));
     write('frontend/dashboard/tests/helpers/render.tsx', testHelpersRenderTsx(config));
     write('frontend/dashboard/tests/unit/example.test.tsx', exampleUnitTestTsx(config));
+    write('frontend/dashboard/tailwind.config.js', tailwindConfigTemplate(config));
+    write('frontend/dashboard/postcss.config.js', postcssConfigTemplate(config));
+    write('frontend/dashboard/tsconfig.json', frontendTsconfigTemplate(config));
+    write('frontend/dashboard/index.html', frontendIndexHtmlTemplate(config));
+    write('frontend/dashboard/src/index.css', frontendIndexCssTemplate(config));
+    write('frontend/dashboard/src/main.tsx', frontendMainTsxTemplate(config));
+    write('frontend/dashboard/src/App.tsx', frontendAppTsxTemplate(config));
     write('frontend/dashboard/Dockerfile', frontendDockerfile(config));
     write('frontend/dashboard/.dockerignore', nodeDockerignore());
   }
@@ -3415,6 +3427,115 @@ CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 `;
 }
 
+// ── React frontend config files ──
+
+function tailwindConfigTemplate(config) {
+  return `/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  theme: { extend: {} },
+  plugins: [],
+}
+`;
+}
+
+function postcssConfigTemplate(config) {
+  return `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+`;
+}
+
+function frontendTsconfigTemplate(config) {
+  return JSON.stringify({
+    compilerOptions: {
+      target: 'ES2020',
+      useDefineForClassFields: true,
+      lib: ['ES2020', 'DOM', 'DOM.Iterable'],
+      module: 'ESNext',
+      skipLibCheck: true,
+      moduleResolution: 'bundler',
+      allowImportingTsExtensions: true,
+      resolveJsonModule: true,
+      isolatedModules: true,
+      noEmit: true,
+      jsx: 'react-jsx',
+      strict: true,
+      noUnusedLocals: true,
+      noUnusedParameters: true,
+      noFallthroughCasesInSwitch: true,
+    },
+    include: ['src'],
+    references: [{ path: './tsconfig.node.json' }],
+  }, null, 2);
+}
+
+function frontendIndexHtmlTemplate(config) {
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${config.projectName}</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+`;
+}
+
+function frontendIndexCssTemplate(config) {
+  return `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #0f172a;
+  color: #f1f5f9;
+  min-height: 100vh;
+}
+
+#root {
+  min-height: 100vh;
+}
+`;
+}
+
+function frontendMainTsxTemplate(config) {
+  return `import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App'
+import './index.css'
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+)
+`;
+}
+
+function frontendAppTsxTemplate(config) {
+  return `export default function App() {
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <h1 className="text-2xl font-bold text-white">${config.projectName}</h1>
+    </div>
+  )
+}
+`;
+}
+
 // ── Agents Dockerfile + main.py ──
 
 function agentsDockerfile(config) {
@@ -3528,6 +3649,7 @@ function frontendPackageJson(config) {
     name: `${config.projectName}-frontend`,
     version: '0.1.0',
     private: true,
+    type: 'module',
     scripts: isNextjs ? {
       dev:            'next dev',
       build:          'next build',

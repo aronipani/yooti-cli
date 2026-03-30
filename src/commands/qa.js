@@ -162,6 +162,13 @@ ${answers.testData || '- No special test data required'}
 }
 
 export async function qaReview(storyId) {
+  const configPath = 'yooti.config.json'
+  const config = existsSync(configPath)
+    ? JSON.parse(readFileSync(configPath, 'utf8'))
+    : {}
+  const coverageOverall = config.quality_gates?.coverage_overall ?? 80
+  const coverageNewCode = config.quality_gates?.coverage_new_code ?? 90
+
   if (!storyId) {
     const ans = await inquirer.prompt([{
       type: 'input',
@@ -233,11 +240,11 @@ export async function qaReview(storyId) {
   }
 
   if (coverage) {
-    hardGate('Overall coverage >= 80%',
-      coverage.overall >= 80,
+    hardGate(`Overall coverage >= ${coverageOverall}%`,
+      coverage.overall >= coverageOverall,
       `${coverage.overall?.toFixed(1)}%`)
-    hardGate('New code coverage >= 90%',
-      coverage.new_code >= 90,
+    hardGate(`New code coverage >= ${coverageNewCode}%`,
+      coverage.new_code >= coverageNewCode,
       `${coverage.new_code?.toFixed(1)}%`)
   } else {
     hardGate('Coverage report exists', false, 'coverage-summary.json not found')
