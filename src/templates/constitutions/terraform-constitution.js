@@ -204,5 +204,53 @@ Write an escalation and stop if:
   - A required secret does not exist in SSM yet
   - The state bucket or lock table does not exist yet
   - Any resource would grant Action=["*"] without documented reason
+
+## Self-audit — mandatory before marking any Terraform task COMPLETE
+
+Before marking a task COMPLETE run this checklist against
+every .tf file written or modified. Write the results to
+.agent/evidence/{STORY-ID}/code-audit.md.
+
+  SECURITY
+  ☐ No hardcoded secrets, passwords, API keys, or account IDs
+  ☐ No Action=["*"] without a documented comment explaining why
+  ☐ No Resource=["*"] without a documented reason
+  ☐ S3 buckets have block_public_access enabled on all 4 settings
+  ☐ Encryption at rest enabled on all storage (S3, DynamoDB, SSM)
+  ☐ TLS enforced on all endpoints
+  ☐ No sensitive values in terraform.tfvars committed to git
+
+  CODE QUALITY
+  ☐ Every variable has type, description, and validation
+  ☐ No type = any used anywhere
+  ☐ No hardcoded region, account ID, or environment string
+  ☐ All resource names use var.project and var.environment
+  ☐ No default = "" on required variables
+  ☐ Every output has a description
+
+  STRUCTURE
+  ☐ main.tf contains resources only — no variables or outputs
+  ☐ variables.tf contains inputs only — no resources or locals
+  ☐ outputs.tf contains outputs only — no resources
+  ☐ versions.tf contains only required_providers and terraform blocks
+  ☐ Environment files call modules only — no direct resource definitions
+
+  TAGGING
+  ☐ Every resource tagged with Project, Environment, ManagedBy=terraform
+  ☐ Tags use var.project and var.environment — not hardcoded strings
+
+  SCANNING
+  ☐ checkov scan: 0 HIGH or CRITICAL findings
+  ☐ terraform validate: passes with no errors
+  ☐ terraform fmt -check: all files correctly formatted
+  ☐ tflint: 0 errors (if installed)
+
+  STATE
+  ☐ No local state — backend.tf exists and points to S3
+  ☐ .terraform/ and *.tfstate are in .gitignore
+  ☐ .terraform.lock.hcl is committed
+
+If any box cannot be checked: fix it before marking COMPLETE.
+Do not mark a Terraform task COMPLETE with a known violation.
 `;
 }

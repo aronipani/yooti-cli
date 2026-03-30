@@ -1,6 +1,6 @@
 {
   "name": "@yooti/cli",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Autonomous SDLC scaffold — one command to a fully wired AI-driven development pipeline",
   "bin": {
     "yooti": "./bin/yooti.js"

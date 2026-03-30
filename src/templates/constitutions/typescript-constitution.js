@@ -197,5 +197,35 @@ Internal private functions — inline comment only if non-obvious:
 No comments that restate the code:
   // increment counter                                       ✗
   count++
+
+## Self-audit — mandatory before marking any TypeScript task COMPLETE
+
+Run this checklist before marking COMPLETE.
+Write results to .agent/evidence/{STORY-ID}/code-audit.md.
+
+  SECURITY
+  ☐ No hardcoded secrets or credentials
+  ☐ Input validation on all API request bodies
+  ☐ Auth middleware on every protected route
+  ☐ No sensitive data in error responses
+
+  CODE QUALITY
+  ☐ No any type — use unknown and type guards instead
+  ☐ Every function has explicit return type
+  ☐ No non-null assertions (!) without a comment explaining why
+  ☐ No console.log debug statements
+  ☐ Error handling on every async operation
+  ☐ No TODO or FIXME in production code
+
+  TESTS
+  ☐ Test file exists for every new source file
+  ☐ Tests use describe/it blocks with clear names
+  ☐ No real external service calls — all mocked
+  ☐ Happy path, error path, and edge cases covered
+
+  SCANNING
+  ☐ eslint: 0 errors, 0 warnings
+  ☐ tsc --noEmit: 0 type errors
+  ☐ vitest: 100% passing
 `
 }
