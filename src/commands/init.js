@@ -340,8 +340,10 @@ export async function init(projectName, cliOptions) {
         message: 'Initial deploy target',
         when: !cliOptions.deploy,
         choices: [
-          { name: 'Docker (local) — start here', value: 'docker' },
-          { name: 'AWS ECS (Fargate)', value: 'aws-ecs' },
+          { name: 'AWS SAM — Lambda + API Gateway (serverless)',  value: 'sam' },
+          { name: 'Terraform — full IaC (Lambda, VPC, RDS, CDN)', value: 'terraform' },
+          { name: 'Docker Compose — local/self-hosted',           value: 'docker' },
+          { name: 'None — I will handle deployment myself',       value: 'none' },
         ],
       },
       {

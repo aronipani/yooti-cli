@@ -17,6 +17,7 @@ import { mongodbConstitution } from './templates/constitutions/mongodb-constitut
 import { configConstitution } from './templates/constitutions/config-constitution.js';
 import { dockerConstitution } from './templates/constitutions/docker-constitution.js';
 import { awsConstitution } from './templates/constitutions/aws-constitution.js';
+import { terraformConstitution } from './templates/constitutions/terraform-constitution.js';
 import {
   featureStoryTemplate, bugfixStoryTemplate, refactorStoryTemplate,
   agentStoryTemplate, securityPatchTemplate, apiContractTemplate
@@ -1507,7 +1508,8 @@ AWS services:        .claude/constitutions/aws.md
          no hardcoded ARNs, Secrets Manager for credentials, LocalStack locally` : ''}
 Configuration files (.env, pyproject.toml, vitest.config): .claude/constitutions/config.md
 Docker files (Dockerfile, docker-compose.yml):             .claude/constitutions/docker.md
-
+${config.deploy === 'terraform' ? `
+Terraform files (.tf, .tfvars, backend configs): .claude/constitutions/terraform.md` : ''}
 Any code in any layer:        .claude/constitutions/security.md
 Any test in any layer:        .claude/constitutions/testing.md
 
@@ -2546,6 +2548,10 @@ Blocks: T002
     write('.claude/constitutions/aws.md', awsConstitution(config));
   }
 
+  if (config.deploy === 'terraform') {
+    write('.claude/constitutions/terraform.md', terraformConstitution(config));
+  }
+
   const hasAgentsConst = config.projectType === 'full' || config.projectType === 'agent';
   if (hasAgentsConst) {
     write('.claude/constitutions/langgraph.md', langgraphConstitution(config));
@@ -2577,6 +2583,58 @@ Blocks: T002
     if (config.awsDeploy === 'sam') {
       write('template.yaml', samTemplate(config));
     }
+  }
+
+  // ── Terraform scaffolding ──
+  if (config.deploy === 'terraform') {
+    const hasFrontend = config.stack.includes('react') || config.stack.includes('nextjs');
+    const hasDb = config.databases?.includes('postgres') || config.databases?.includes('redis');
+    const region = config.aws?.region || 'us-east-1';
+
+    // Core modules — always generated
+    const coreModules = ['dynamodb', 'lambda', 'api-gateway', 'ssm'];
+    for (const mod of coreModules) {
+      mkdirSync(toForwardSlash(`${root}/infra/modules/${mod}`), { recursive: true });
+      write(`infra/modules/${mod}/main.tf`, tfModuleMain(mod, config));
+      write(`infra/modules/${mod}/variables.tf`, tfModuleVariables(mod, config));
+      write(`infra/modules/${mod}/outputs.tf`, tfModuleOutputs(mod, config));
+      write(`infra/modules/${mod}/versions.tf`, tfVersions());
+    }
+
+    // Frontend CDN module
+    if (hasFrontend) {
+      mkdirSync(toForwardSlash(`${root}/infra/modules/s3-cloudfront`), { recursive: true });
+      write('infra/modules/s3-cloudfront/main.tf', tfModuleMain('s3-cloudfront', config));
+      write('infra/modules/s3-cloudfront/variables.tf', tfModuleVariables('s3-cloudfront', config));
+      write('infra/modules/s3-cloudfront/outputs.tf', tfModuleOutputs('s3-cloudfront', config));
+      write('infra/modules/s3-cloudfront/versions.tf', tfVersions());
+    }
+
+    // VPC module — if databases selected
+    if (hasDb) {
+      mkdirSync(toForwardSlash(`${root}/infra/modules/vpc`), { recursive: true });
+      write('infra/modules/vpc/main.tf', tfModuleMain('vpc', config));
+      write('infra/modules/vpc/variables.tf', tfModuleVariables('vpc', config));
+      write('infra/modules/vpc/outputs.tf', tfModuleOutputs('vpc', config));
+      write('infra/modules/vpc/versions.tf', tfVersions());
+    }
+
+    // Environments
+    for (const env of ['dev', 'prod']) {
+      mkdirSync(toForwardSlash(`${root}/infra/environments/${env}`), { recursive: true });
+      write(`infra/environments/${env}/main.tf`, tfEnvMain(env, config, { hasFrontend, hasDb }));
+      write(`infra/environments/${env}/variables.tf`, tfEnvVariables(config));
+      write(`infra/environments/${env}/terraform.tfvars`, tfEnvTfvars(env, config));
+      write(`infra/environments/${env}/backend.tf`, tfEnvBackend(env, config));
+    }
+
+    // Bootstrap script
+    mkdirSync(toForwardSlash(`${root}/infra/bootstrap`), { recursive: true });
+    write('infra/bootstrap/create-state-backend.sh', tfBootstrapScript(config));
+
+    // CI workflows
+    write('.github/workflows/terraform-plan.yml', tfPlanWorkflow(config));
+    write('.github/workflows/terraform-apply.yml', tfApplyWorkflow(config));
   }
 
   // ── Regression suite ──
@@ -5609,5 +5667,940 @@ class TestExampleJob:
 # Always mock AWS services with @mock_aws from moto
 # Never make real AWS calls in unit tests
 # Use the s3_bucket fixture from conftest.py for S3 tests
+`;
+}
+
+// ── Terraform scaffold templates ──
+
+function tfVersions() {
+  return `terraform {
+  required_version = ">= 1.7.0"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+`;
+}
+
+function tfModuleMain(mod, config) {
+  const name = config.projectName || 'myproject';
+  switch (mod) {
+    case 'dynamodb':
+      return `resource "aws_dynamodb_table" "main" {
+  name         = "\${var.project}-\${var.environment}-\${var.table_name}"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = var.hash_key
+  range_key    = var.range_key != "" ? var.range_key : null
+
+  attribute {
+    name = var.hash_key
+    type = "S"
+  }
+
+  dynamic "attribute" {
+    for_each = var.range_key != "" ? [var.range_key] : []
+    content {
+      name = attribute.value
+      type = "S"
+    }
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  tags = {
+    Module = "dynamodb"
+  }
+}
+`;
+    case 'lambda':
+      return `data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = var.source_dir
+  output_path = "\${path.module}/\${var.function_name}.zip"
+}
+
+resource "aws_lambda_function" "main" {
+  function_name    = "\${var.project}-\${var.environment}-\${var.function_name}"
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+  handler          = var.handler
+  runtime          = var.runtime
+  timeout          = var.timeout
+  memory_size      = var.memory_size
+  role             = aws_iam_role.lambda_exec.arn
+
+  environment {
+    variables = var.environment_variables
+  }
+
+  tags = {
+    Module = "lambda"
+  }
+}
+
+resource "aws_iam_role" "lambda_exec" {
+  name = "\${var.project}-\${var.environment}-\${var.function_name}-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/\${var.project}-\${var.environment}-\${var.function_name}"
+  retention_in_days = var.log_retention_days
+}
+`;
+    case 'api-gateway':
+      return `resource "aws_apigatewayv2_api" "main" {
+  name          = "\${var.project}-\${var.environment}-api"
+  protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = var.cors_allow_origins
+    allow_methods = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+    allow_headers = ["Content-Type", "Authorization"]
+    max_age       = 86400
+  }
+
+  tags = {
+    Module = "api-gateway"
+  }
+}
+
+resource "aws_apigatewayv2_stage" "main" {
+  api_id      = aws_apigatewayv2_api.main.id
+  name        = var.environment
+  auto_deploy = true
+
+  default_route_settings {
+    throttling_burst_limit = var.throttle_burst
+    throttling_rate_limit  = var.throttle_rate
+  }
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api.arn
+  }
+}
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/aws/apigateway/\${var.project}-\${var.environment}-api"
+  retention_in_days = var.log_retention_days
+}
+`;
+    case 'ssm':
+      return `resource "aws_ssm_parameter" "params" {
+  for_each = var.parameters
+
+  name        = "/\${var.project}/\${var.environment}/\${each.key}"
+  type        = each.value.secure ? "SecureString" : "String"
+  value       = each.value.value
+  description = each.value.description
+
+  tags = {
+    Module = "ssm"
+  }
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+`;
+    case 's3-cloudfront':
+      return `resource "aws_s3_bucket" "frontend" {
+  bucket = "\${var.project}-\${var.environment}-frontend"
+
+  tags = {
+    Module = "s3-cloudfront"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "frontend" {
+  bucket                  = aws_s3_bucket.frontend.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_cloudfront_origin_access_identity" "frontend" {
+  comment = "\${var.project}-\${var.environment} frontend OAI"
+}
+
+resource "aws_cloudfront_distribution" "frontend" {
+  origin {
+    domain_name = aws_s3_bucket.frontend.bucket_regional_domain_name
+    origin_id   = "S3-frontend"
+
+    s3_origin_config {
+      origin_access_identity = aws_cloudfront_origin_access_identity.frontend.cloudfront_access_identity_path
+    }
+  }
+
+  enabled             = true
+  is_ipv6_enabled     = true
+  default_root_object = "index.html"
+
+  default_cache_behavior {
+    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "S3-frontend"
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = false
+      cookies { forward = "none" }
+    }
+
+    min_ttl     = 0
+    default_ttl = 3600
+    max_ttl     = 86400
+  }
+
+  custom_error_response {
+    error_code         = 404
+    response_code      = 200
+    response_page_path = "/index.html"
+  }
+
+  restrictions {
+    geo_restriction { restriction_type = "none" }
+  }
+
+  viewer_certificate {
+    cloudfront_default_certificate = true
+  }
+
+  tags = {
+    Module = "s3-cloudfront"
+  }
+}
+
+data "aws_iam_policy_document" "frontend_s3" {
+  statement {
+    actions   = ["s3:GetObject"]
+    resources = ["\${aws_s3_bucket.frontend.arn}/*"]
+    principals {
+      type        = "AWS"
+      identifiers = [aws_cloudfront_origin_access_identity.frontend.iam_arn]
+    }
+  }
+}
+
+resource "aws_s3_bucket_policy" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+  policy = data.aws_iam_policy_document.frontend_s3.json
+}
+`;
+    case 'vpc':
+      return `resource "aws_vpc" "main" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name   = "\${var.project}-\${var.environment}-vpc"
+    Module = "vpc"
+  }
+}
+
+resource "aws_subnet" "private" {
+  count             = length(var.private_subnets)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = var.private_subnets[count.index]
+  availability_zone = var.availability_zones[count.index]
+
+  tags = {
+    Name = "\${var.project}-\${var.environment}-private-\${count.index}"
+  }
+}
+
+resource "aws_subnet" "public" {
+  count                   = length(var.public_subnets)
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = var.public_subnets[count.index]
+  availability_zone       = var.availability_zones[count.index]
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "\${var.project}-\${var.environment}-public-\${count.index}"
+  }
+}
+
+resource "aws_internet_gateway" "main" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name = "\${var.project}-\${var.environment}-igw"
+  }
+}
+
+resource "aws_route_table" "public" {
+  vpc_id = aws_vpc.main.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = {
+    Name = "\${var.project}-\${var.environment}-public-rt"
+  }
+}
+
+resource "aws_route_table_association" "public" {
+  count          = length(var.public_subnets)
+  subnet_id      = aws_subnet.public[count.index].id
+  route_table_id = aws_route_table.public.id
+}
+
+resource "aws_security_group" "database" {
+  name_prefix = "\${var.project}-\${var.environment}-db-"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+    description = "PostgreSQL from within VPC"
+  }
+
+  ingress {
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    cidr_blocks = [var.vpc_cidr]
+    description = "Redis from within VPC"
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "All outbound traffic"
+  }
+
+  tags = {
+    Name = "\${var.project}-\${var.environment}-db-sg"
+  }
+}
+`;
+    default:
+      return '';
+  }
+}
+
+function tfModuleVariables(mod, config) {
+  const common = `variable "project" {
+  type        = string
+  description = "Project name used in resource naming"
+}
+
+variable "environment" {
+  type        = string
+  description = "Deployment environment (dev or prod)"
+  validation {
+    condition     = contains(["dev", "prod"], var.environment)
+    error_message = "environment must be dev or prod"
+  }
+}
+`;
+
+  switch (mod) {
+    case 'dynamodb':
+      return common + `
+variable "table_name" {
+  type        = string
+  description = "DynamoDB table name suffix"
+}
+
+variable "hash_key" {
+  type        = string
+  description = "Partition key attribute name"
+  default     = "PK"
+}
+
+variable "range_key" {
+  type        = string
+  description = "Sort key attribute name (empty string to omit)"
+  default     = "SK"
+}
+`;
+    case 'lambda':
+      return common + `
+variable "function_name" {
+  type        = string
+  description = "Lambda function name suffix"
+}
+
+variable "source_dir" {
+  type        = string
+  description = "Path to the Lambda source directory"
+}
+
+variable "handler" {
+  type        = string
+  description = "Lambda handler (e.g. index.handler)"
+  default     = "index.handler"
+}
+
+variable "runtime" {
+  type        = string
+  description = "Lambda runtime"
+  default     = "python3.12"
+}
+
+variable "timeout" {
+  type        = number
+  description = "Lambda timeout in seconds"
+  default     = 30
+}
+
+variable "memory_size" {
+  type        = number
+  description = "Lambda memory in MB"
+  default     = 256
+}
+
+variable "environment_variables" {
+  type        = map(string)
+  description = "Environment variables for the Lambda function"
+  default     = {}
+}
+
+variable "log_retention_days" {
+  type        = number
+  description = "CloudWatch log retention in days"
+  default     = 14
+}
+`;
+    case 'api-gateway':
+      return common + `
+variable "cors_allow_origins" {
+  type        = list(string)
+  description = "Allowed CORS origins"
+  default     = ["*"]
+}
+
+variable "throttle_burst" {
+  type        = number
+  description = "API Gateway throttle burst limit"
+  default     = 100
+}
+
+variable "throttle_rate" {
+  type        = number
+  description = "API Gateway throttle rate limit"
+  default     = 50
+}
+
+variable "log_retention_days" {
+  type        = number
+  description = "CloudWatch log retention in days"
+  default     = 14
+}
+`;
+    case 'ssm':
+      return common + `
+variable "parameters" {
+  type = map(object({
+    value       = string
+    description = string
+    secure      = bool
+  }))
+  description = "Map of SSM parameters to create"
+  default     = {}
+}
+`;
+    case 's3-cloudfront':
+      return common;
+    case 'vpc':
+      return common + `
+variable "vpc_cidr" {
+  type        = string
+  description = "CIDR block for the VPC"
+  default     = "10.0.0.0/16"
+}
+
+variable "private_subnets" {
+  type        = list(string)
+  description = "CIDR blocks for private subnets"
+  default     = ["10.0.1.0/24", "10.0.2.0/24"]
+}
+
+variable "public_subnets" {
+  type        = list(string)
+  description = "CIDR blocks for public subnets"
+  default     = ["10.0.101.0/24", "10.0.102.0/24"]
+}
+
+variable "availability_zones" {
+  type        = list(string)
+  description = "Availability zones for subnets"
+  default     = ["us-east-1a", "us-east-1b"]
+}
+`;
+    default:
+      return common;
+  }
+}
+
+function tfModuleOutputs(mod, config) {
+  switch (mod) {
+    case 'dynamodb':
+      return `output "table_name" {
+  value       = aws_dynamodb_table.main.name
+  description = "DynamoDB table name"
+}
+
+output "table_arn" {
+  value       = aws_dynamodb_table.main.arn
+  description = "DynamoDB table ARN"
+}
+`;
+    case 'lambda':
+      return `output "function_name" {
+  value       = aws_lambda_function.main.function_name
+  description = "Lambda function name"
+}
+
+output "function_arn" {
+  value       = aws_lambda_function.main.arn
+  description = "Lambda function ARN"
+}
+
+output "invoke_arn" {
+  value       = aws_lambda_function.main.invoke_arn
+  description = "Lambda invoke ARN (for API Gateway integration)"
+}
+
+output "role_arn" {
+  value       = aws_iam_role.lambda_exec.arn
+  description = "Lambda execution role ARN"
+}
+`;
+    case 'api-gateway':
+      return `output "api_id" {
+  value       = aws_apigatewayv2_api.main.id
+  description = "API Gateway ID"
+}
+
+output "api_endpoint" {
+  value       = aws_apigatewayv2_api.main.api_endpoint
+  description = "API Gateway endpoint URL"
+}
+
+output "stage_id" {
+  value       = aws_apigatewayv2_stage.main.id
+  description = "API Gateway stage ID"
+}
+`;
+    case 'ssm':
+      return `output "parameter_arns" {
+  value       = { for k, v in aws_ssm_parameter.params : k => v.arn }
+  description = "Map of SSM parameter ARNs"
+}
+`;
+    case 's3-cloudfront':
+      return `output "bucket_name" {
+  value       = aws_s3_bucket.frontend.id
+  description = "S3 bucket name"
+}
+
+output "bucket_arn" {
+  value       = aws_s3_bucket.frontend.arn
+  description = "S3 bucket ARN"
+}
+
+output "cloudfront_domain" {
+  value       = aws_cloudfront_distribution.frontend.domain_name
+  description = "CloudFront distribution domain name"
+}
+
+output "cloudfront_id" {
+  value       = aws_cloudfront_distribution.frontend.id
+  description = "CloudFront distribution ID"
+}
+`;
+    case 'vpc':
+      return `output "vpc_id" {
+  value       = aws_vpc.main.id
+  description = "VPC ID"
+}
+
+output "private_subnet_ids" {
+  value       = aws_subnet.private[*].id
+  description = "Private subnet IDs"
+}
+
+output "public_subnet_ids" {
+  value       = aws_subnet.public[*].id
+  description = "Public subnet IDs"
+}
+
+output "database_security_group_id" {
+  value       = aws_security_group.database.id
+  description = "Database security group ID"
+}
+`;
+    default:
+      return '';
+  }
+}
+
+function tfEnvMain(env, config, opts) {
+  const name = config.projectName || 'myproject';
+  const region = config.aws?.region || 'us-east-1';
+  let modules = `
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.project
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Repository  = var.repository_url
+    }
+  }
+}
+
+module "dynamodb" {
+  source      = "../../modules/dynamodb"
+  project     = var.project
+  environment = var.environment
+  table_name  = "main"
+}
+
+module "lambda" {
+  source        = "../../modules/lambda"
+  project       = var.project
+  environment   = var.environment
+  function_name = "api"
+  source_dir    = "\${path.root}/../../../services/api/dist"
+  handler       = "index.handler"
+  runtime       = "nodejs20.x"
+
+  environment_variables = {
+    TABLE_NAME  = module.dynamodb.table_name
+    ENVIRONMENT = var.environment
+  }
+}
+
+module "api_gateway" {
+  source      = "../../modules/api-gateway"
+  project     = var.project
+  environment = var.environment
+}
+
+module "ssm" {
+  source      = "../../modules/ssm"
+  project     = var.project
+  environment = var.environment
+}
+`;
+
+  if (opts.hasFrontend) {
+    modules += `
+module "s3_cloudfront" {
+  source      = "../../modules/s3-cloudfront"
+  project     = var.project
+  environment = var.environment
+}
+`;
+  }
+
+  if (opts.hasDb) {
+    modules += `
+module "vpc" {
+  source      = "../../modules/vpc"
+  project     = var.project
+  environment = var.environment
+}
+`;
+  }
+
+  return modules.trimStart();
+}
+
+function tfEnvVariables(config) {
+  const region = config.aws?.region || 'us-east-1';
+  return `variable "project" {
+  type        = string
+  description = "Project name"
+}
+
+variable "environment" {
+  type        = string
+  description = "Deployment environment (dev or prod)"
+  validation {
+    condition     = contains(["dev", "prod"], var.environment)
+    error_message = "environment must be dev or prod"
+  }
+}
+
+variable "aws_region" {
+  type        = string
+  description = "AWS region"
+  default     = "${region}"
+}
+
+variable "repository_url" {
+  type        = string
+  description = "Git repository URL for tagging"
+  default     = ""
+}
+`;
+}
+
+function tfEnvTfvars(env, config) {
+  const name = config.projectName || 'myproject';
+  const region = config.aws?.region || 'us-east-1';
+  return `project        = "${name}"
+environment    = "${env}"
+aws_region     = "${region}"
+repository_url = ""
+`;
+}
+
+function tfEnvBackend(env, config) {
+  const name = config.projectName || 'myproject';
+  const region = config.aws?.region || 'us-east-1';
+  return `terraform {
+  backend "s3" {
+    bucket         = "${name}-terraform-state-${env}"
+    key            = "infra/terraform.tfstate"
+    region         = "${region}"
+    dynamodb_table = "${name}-terraform-locks"
+    encrypt        = true
+  }
+}
+`;
+}
+
+function tfBootstrapScript(config) {
+  const name = config.projectName || 'myproject';
+  const region = config.aws?.region || 'us-east-1';
+  return `#!/usr/bin/env bash
+# Bootstrap Terraform state backend — idempotent, safe to run twice.
+# Usage: bash infra/bootstrap/create-state-backend.sh [environment]
+
+set -euo pipefail
+
+PROJECT="${name}"
+ENV="\${1:-dev}"
+REGION="${region}"
+BUCKET="\${PROJECT}-terraform-state-\${ENV}"
+LOCK_TABLE="\${PROJECT}-terraform-locks"
+
+echo "==> Creating S3 state bucket: \${BUCKET}"
+if aws s3api head-bucket --bucket "\${BUCKET}" 2>/dev/null; then
+  echo "    Bucket already exists — skipping"
+else
+  aws s3api create-bucket \\
+    --bucket "\${BUCKET}" \\
+    --region "\${REGION}" \\
+    \$([ "\${REGION}" != "us-east-1" ] && echo "--create-bucket-configuration LocationConstraint=\${REGION}" || echo "")
+  echo "    Created"
+fi
+
+echo "==> Enabling versioning on \${BUCKET}"
+aws s3api put-bucket-versioning \\
+  --bucket "\${BUCKET}" \\
+  --versioning-configuration Status=Enabled
+
+echo "==> Enabling server-side encryption on \${BUCKET}"
+aws s3api put-bucket-encryption \\
+  --bucket "\${BUCKET}" \\
+  --server-side-encryption-configuration '{
+    "Rules": [{"ApplyServerSideEncryptionByDefault": {"SSEAlgorithm": "AES256"}}]
+  }'
+
+echo "==> Blocking public access on \${BUCKET}"
+aws s3api put-public-access-block \\
+  --bucket "\${BUCKET}" \\
+  --public-access-block-configuration \\
+    BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true
+
+echo "==> Creating DynamoDB lock table: \${LOCK_TABLE}"
+if aws dynamodb describe-table --table-name "\${LOCK_TABLE}" --region "\${REGION}" >/dev/null 2>&1; then
+  echo "    Table already exists — skipping"
+else
+  aws dynamodb create-table \\
+    --table-name "\${LOCK_TABLE}" \\
+    --attribute-definitions AttributeName=LockID,AttributeType=S \\
+    --key-schema AttributeName=LockID,KeyType=HASH \\
+    --billing-mode PAY_PER_REQUEST \\
+    --region "\${REGION}"
+  echo "    Created"
+fi
+
+echo ""
+echo "==> Done. Next steps:"
+echo "    cd infra/environments/\${ENV}"
+echo "    terraform init"
+echo "    terraform plan"
+`;
+}
+
+function tfPlanWorkflow(config) {
+  const region = config.aws?.region || 'us-east-1';
+  return `name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+
+permissions:
+  id-token: write
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [dev]
+    defaults:
+      run:
+        working-directory: infra/environments/\${{ matrix.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${region}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Format Check
+        run: terraform fmt -check -recursive ../../
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = \`#### Terraform Plan (\${{ matrix.environment }})
+            \\\`\\\`\\\`
+            \${{ steps.plan.outputs.stdout }}
+            \\\`\\\`\\\`
+            \`;
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+`;
+}
+
+function tfApplyWorkflow(config) {
+  const region = config.aws?.region || 'us-east-1';
+  return `name: Terraform Apply
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply-dev:
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: infra/environments/dev
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${region}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
+
+  apply-prod:
+    runs-on: ubuntu-latest
+    needs: apply-dev
+    environment: production
+    defaults:
+      run:
+        working-directory: infra/environments/prod
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: \${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${region}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "~> 1.7"
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan
 `;
 }
