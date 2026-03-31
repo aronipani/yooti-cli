@@ -149,7 +149,23 @@ export async function sprintStart(options = {}) {
     } catch { /* script may not be runnable yet */ }
   }
 
-  // Step 5 — Summary
+  // Step 5 — Initialise audit log files for every story
+  const logsDir = '.agent/logs'
+  mkdirSync(logsDir, { recursive: true })
+  for (const sid of stories) {
+    const logPath = `${logsDir}/${sid}.log.json`
+    if (!existsSync(logPath)) {
+      writeFileSync(logPath, JSON.stringify([{
+        event: 'SPRINT_START',
+        story_id: sid,
+        sprint: sprintNum,
+        timestamp: new Date().toISOString()
+      }], null, 2))
+    }
+  }
+  console.log(chalk.green(`  ✓ Audit logs initialised for ${stories.length} story/stories`))
+
+  // Step 6 — Summary
   console.log(chalk.cyan('\n  Sprint started\n'))
   console.log(`  ${chalk.green('✓')} Pre-flight checks passed`)
   console.log(`  ${chalk.green('✓')} Regression baseline captured (Sprint ${sprintNum})`)
