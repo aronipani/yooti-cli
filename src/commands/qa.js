@@ -271,14 +271,46 @@ export async function qaReview(storyId) {
   }
 
   const auditPath = `${evidenceDir}/code-audit.md`
+  let auditContent = null
   if (existsSync(auditPath)) {
-    const auditContent = readFileSync(auditPath, 'utf8')
+    auditContent = readFileSync(auditPath, 'utf8')
     const hasViolations = auditContent.includes('## Violations found') &&
       !auditContent.includes('No violations found')
     hardGate('Code audit — 0 violations', !hasViolations,
       hasViolations ? 'violations found — see code-audit.md' : 'clean')
   } else {
     hardGate('Code audit file exists', false, 'code-audit.md missing from evidence')
+  }
+
+  // Detect Terraform story
+  const storyPath = `.agent/requirements/${storyId}-validated.json`
+  const story = existsSync(storyPath)
+    ? JSON.parse(readFileSync(storyPath, 'utf8'))
+    : null
+
+  const isTerraformStory = story && (
+    story.constitutions_to_apply?.includes('terraform') ||
+    story.affected_layers?.includes('infra')
+  )
+
+  if (isTerraformStory && auditContent) {
+    hardGate(
+      'Terraform audit — no hardcoded secrets',
+      !auditContent.toLowerCase().includes('hardcoded secret') &&
+      !auditContent.toLowerCase().includes('violation'),
+      auditContent.includes('No violations found') ? 'clean' : 'check audit'
+    )
+    hardGate(
+      'Terraform audit — checkov passed',
+      auditContent.includes('checkov') &&
+      (auditContent.includes('✓') || auditContent.includes('PASS')),
+      'checkov results in audit'
+    )
+    hardGate(
+      'Terraform audit — terraform validate passed',
+      auditContent.includes('terraform validate'),
+      'validate results in audit'
+    )
   }
 
   if (mutation) {

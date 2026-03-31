@@ -1340,7 +1340,66 @@ Steps in order:
        Update the audit report after fixing.
 
      Add the audit report to the PR body under a ## Code audit section.
+${config.deploy === 'terraform' ? `
+  7b. Terraform self-audit before PR (infra stories only)
 
+     For stories with affected_layers containing "infra" or
+     constitutions_to_apply containing "terraform", run the
+     Terraform constitution self-audit checklist and write
+     .agent/evidence/[${itemTag}]/code-audit.md in this format:
+
+       # Code Audit — [${itemTag}]
+       Date: [ISO timestamp]
+       Story type: Terraform infrastructure
+       Files audited: N
+
+       ## Violations found
+       [list violations with file and line]
+       OR: No violations found.
+
+       ## Checks passed
+
+       SECURITY
+       [✓ or ✗] No hardcoded secrets, passwords, API keys, or account IDs
+       [✓ or ✗] No Action=["*"] without documented comment
+       [✓ or ✗] No Resource=["*"] without documented reason
+       [✓ or ✗] S3 buckets have block_public_access on all 4 settings
+       [✓ or ✗] Encryption enabled on all storage resources
+       [✓ or ✗] TLS enforced on all endpoints
+       [✓ or ✗] No sensitive values in committed tfvars files
+
+       CODE QUALITY
+       [✓ or ✗] Every variable has type, description, and validation
+       [✓ or ✗] No type = any used anywhere
+       [✓ or ✗] No hardcoded region, account ID, or environment string
+       [✓ or ✗] All resource names use var.project and var.environment
+       [✓ or ✗] Every output has a description
+
+       STRUCTURE
+       [✓ or ✗] main.tf contains resources only
+       [✓ or ✗] variables.tf contains inputs only
+       [✓ or ✗] outputs.tf contains outputs only
+       [✓ or ✗] versions.tf contains only required_providers block
+       [✓ or ✗] Environment files call modules only
+
+       TAGGING
+       [✓ or ✗] Every resource tagged with Project, Environment, ManagedBy=terraform
+
+       SCANNING
+       [✓ or ✗] checkov scan: 0 HIGH or CRITICAL findings
+       [✓ or ✗] terraform validate: passes
+       [✓ or ✗] terraform fmt -check: passes
+
+       STATE
+       [✓ or ✗] No local state — backend.tf points to S3
+       [✓ or ✗] .terraform/ and *.tfstate in .gitignore
+       [✓ or ✗] .terraform.lock.hcl committed
+
+       [N] checks passed, [N] checks failed.
+
+     If any check fails: fix it before opening the PR.
+     Do NOT open a PR with Terraform violations.
+` : ''}
   8. Hard blocks — do NOT open PR if any are true:
      test-results.json shows failed > 0
      coverage-summary.json shows overall < 80
@@ -1348,7 +1407,11 @@ Steps in order:
      regression-diff.json shows newly_failing is not empty
      security-scan.json shows snyk.critical > 0 or snyk.high > 0
      code-audit.md contains violations
-
+${config.deploy === 'terraform' ? `
+  .agent/evidence/[${itemTag}]/code-audit.md    required for infra stories
+    Must contain checkov, terraform validate, and terraform fmt results
+    Must show 0 violations for all Terraform constitution checks
+` : ''}
   9. Open the PR only after all evidence files exist
      and all hard blocks are clear
 
