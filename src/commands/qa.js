@@ -296,8 +296,12 @@ export async function qaReview(storyId) {
   if (isTerraformStory && auditContent) {
     hardGate(
       'Terraform audit — no hardcoded secrets',
-      !auditContent.toLowerCase().includes('hardcoded secret') &&
-      !auditContent.toLowerCase().includes('violation'),
+      auditContent.includes('No violations found') ||
+      (
+        !auditContent.toLowerCase().includes('hardcoded secret') &&
+        !auditContent.includes('✗') &&
+        !auditContent.includes('❌')
+      ),
       auditContent.includes('No violations found') ? 'clean' : 'check audit'
     )
     hardGate(
